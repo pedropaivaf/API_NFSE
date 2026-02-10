@@ -16,6 +16,9 @@ router.post('/', upload.single('certificate'), companyController.createCompany);
 // POST /companies/:id/sync - Trigger Manual Sync
 router.post('/:id/sync', companyController.syncCompany);
 
+// GET /companies/all-nfs - List All NFS with Company Info
+router.get('/all-nfs', companyController.getAllNfs);
+
 // GET /companies/:id/nfs - List NFS for a company
 router.get('/:id/nfs', companyController.getNfs);
 

@@ -122,6 +122,30 @@ exports.syncCompany = async (req, res) => {
     }
 };
 
+exports.getAllNfs = async (req, res) => {
+    try {
+        // Fetch all NFs joined with company info
+        // Note: This requires a foreign key relationship between nfs_docs.company_id and companies.id
+        const { data, error } = await supabase
+            .from('nfs_docs')
+            .select(`
+                *,
+                companies (
+                    name,
+                    cnpj
+                )
+            `)
+            .order('issue_date', { ascending: false });
+
+        if (error) throw error;
+
+        res.json(data);
+    } catch (error) {
+        console.error('List All NFS Error:', error);
+        res.status(500).json({ error: error.message });
+    }
+};
+
 exports.getNfs = async (req, res) => {
     const { id } = req.params; // companyId
 

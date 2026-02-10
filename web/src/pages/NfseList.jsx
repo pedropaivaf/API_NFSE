@@ -1,67 +1,79 @@
 
 import { useState, useEffect } from 'react';
 import axios from 'axios';
-import { FileText, Search, Loader2, Download, AlertCircle } from 'lucide-react';
+import { FileText, Search, Loader2, Download, AlertCircle, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
 export default function NfseList() {
-    const [companies, setCompanies] = useState([]);
-    const [selectedCompanyId, setSelectedCompanyId] = useState('');
     const [nfs, setNfs] = useState([]);
-    const [loadingCompanies, setLoadingCompanies] = useState(true);
     const [loadingNfs, setLoadingNfs] = useState(false);
     const [error, setError] = useState(null);
+    const [searchTerm, setSearchTerm] = useState('');
+    const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
 
-    // Fetch companies on mount
+    // Fetch all NFS on mount
     useEffect(() => {
-        const fetchCompanies = async () => {
-            try {
-                const res = await axios.get(`${API_URL}/companies`);
-                setCompanies(res.data);
-                if (res.data.length > 0) {
-                    setSelectedCompanyId(res.data[0].id); // Auto-select first company
-                }
-            } catch (err) {
-                console.error("Failed to fetch companies", err);
-                setError("Erro ao carregar empresas.");
-            } finally {
-                setLoadingCompanies(false);
-            }
-        };
-        fetchCompanies();
-    }, []);
-
-    // Fetch NFS when selected company changes
-    useEffect(() => {
-        if (!selectedCompanyId) return;
-
         const fetchNfs = async () => {
             setLoadingNfs(true);
             setError(null);
             try {
-                const res = await axios.get(`${API_URL}/companies/${selectedCompanyId}/nfs`);
+                // Now fetching ALL NFs from all companies
+                // Requires the backend to have this route implemented
+                const res = await axios.get(`${API_URL}/companies/all-nfs`);
                 setNfs(res.data);
             } catch (err) {
                 console.error("Failed to fetch NFS", err);
-                setError("Erro ao carregar notas fiscais.");
+                setError("Erro ao carregar notas fiscais do sistema.");
             } finally {
                 setLoadingNfs(false);
             }
         };
 
         fetchNfs();
-    }, [selectedCompanyId]);
+    }, []);
 
     const handleDownloadXml = (xmlUrl) => {
-        // In a real scenario, this would generate a signed URL from Supabase or proxy through backend
         alert(`Download do XML iniciado: ${xmlUrl}`);
         // window.open(xmlUrl, '_blank');
     };
 
-    if (loadingCompanies) {
-        return <div className="flex justify-center py-20"><Loader2 className="animate-spin text-brand-600" size={32} /></div>;
-    }
+    const handleSort = (key) => {
+        let direction = 'asc';
+        if (sortConfig.key === key && sortConfig.direction === 'asc') {
+            direction = 'desc';
+        }
+        setSortConfig({ key, direction });
+    };
+
+    const sortedNfs = [...nfs].sort((a, b) => {
+        if (!sortConfig.key) return 0;
+
+        let aValue = a[sortConfig.key];
+        let bValue = b[sortConfig.key];
+
+        if (sortConfig.key === 'amount') {
+            aValue = parseFloat(aValue);
+            bValue = parseFloat(bValue);
+        }
+
+        if (aValue < bValue) {
+            return sortConfig.direction === 'asc' ? -1 : 1;
+        }
+        if (aValue > bValue) {
+            return sortConfig.direction === 'asc' ? 1 : -1;
+        }
+        return 0;
+    });
+
+    const filteredNfs = sortedNfs.filter(note => {
+        const term = searchTerm.toLowerCase();
+        const companyName = note.companies?.name?.toLowerCase() || '';
+        const accessKey = note.access_key?.toLowerCase() || '';
+        const status = note.status?.toLowerCase() || '';
+
+        return companyName.includes(term) || accessKey.includes(term) || status.includes(term);
+    });
 
     return (
         <div className="space-y-6">
@@ -74,19 +86,15 @@ export default function NfseList() {
                     <p className="text-slate-500">Visualize e baixe os XMLs processados</p>
                 </div>
 
-                <div className="flex items-center gap-3 bg-white p-2 rounded-lg border border-slate-200 shadow-sm">
-                    <span className="text-sm font-medium text-slate-600 pl-2">Empresa:</span>
-                    <select
-                        className="bg-transparent border-none text-sm font-semibold text-slate-900 focus:ring-0 cursor-pointer outline-none"
-                        value={selectedCompanyId}
-                        onChange={(e) => setSelectedCompanyId(e.target.value)}
-                    >
-                        {companies.map(company => (
-                            <option key={company.id} value={company.id}>
-                                {company.name} ({company.cnpj})
-                            </option>
-                        ))}
-                    </select>
+                <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
+                    <input
+                        type="text"
+                        placeholder="Buscar por nome da empresa, chave..."
+                        className="pl-10 pr-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 focus:outline-none w-full md:w-80"
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                    />
                 </div>
             </div>
 
@@ -100,11 +108,18 @@ export default function NfseList() {
             <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
                 {/* Table Header */}
                 <div className="grid grid-cols-12 gap-4 px-6 py-3 bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                    <div className="col-span-3">Empresa</div>
                     <div className="col-span-3">Chave de Acesso</div>
                     <div className="col-span-2">Emissão</div>
-                    <div className="col-span-2 text-right">Valor (R$)</div>
-                    <div className="col-span-3">Status</div>
-                    <div className="col-span-2 text-right">Ações</div>
+                    <div className="col-span-2 text-right cursor-pointer flex items-center justify-end gap-1 hover:text-brand-600" onClick={() => handleSort('amount')}>
+                        Valor (R$)
+                        {sortConfig.key === 'amount' && (
+                            sortConfig.direction === 'asc' ? <ArrowUp size={14} /> : <ArrowDown size={14} />
+                        )}
+                        {sortConfig.key !== 'amount' && <ArrowUpDown size={14} className="opacity-50" />}
+                    </div>
+                    <div className="col-span-1">Status</div>
+                    <div className="col-span-1 text-right">Ações</div>
                 </div>
 
                 {/* Table Body */}
@@ -113,14 +128,17 @@ export default function NfseList() {
                         <Loader2 className="animate-spin mb-2" size={24} />
                         Carregando notas...
                     </div>
-                ) : nfs.length === 0 ? (
+                ) : filteredNfs.length === 0 ? (
                     <div className="py-20 text-center text-slate-400">
-                        Nenhuma nota fiscal encontrada para esta empresa.
+                        {searchTerm ? 'Nenhuma nota encontrada para sua busca.' : 'Nenhuma nota fiscal encontrada no sistema.'}
                     </div>
                 ) : (
                     <div className="divide-y divide-slate-100">
-                        {nfs.map((note) => (
+                        {filteredNfs.map((note) => (
                             <div key={note.id} className="grid grid-cols-12 gap-4 px-6 py-4 items-center hover:bg-slate-50 transition text-sm">
+                                <div className="col-span-3 text-slate-900 font-medium truncate" title={note.companies?.name}>
+                                    {note.companies?.name || 'Empresa removida'}
+                                </div>
                                 <div className="col-span-3 font-mono text-xs text-slate-600 break-all" title={note.access_key}>
                                     {note.access_key.substring(0, 20)}...
                                 </div>
@@ -130,13 +148,13 @@ export default function NfseList() {
                                 <div className="col-span-2 text-right font-medium text-slate-900">
                                     {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(note.amount)}
                                 </div>
-                                <div className="col-span-3">
+                                <div className="col-span-1">
                                     <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${note.status === 'processed' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
                                         }`}>
-                                        {note.status === 'processed' ? 'Processada' : 'Pendente'}
+                                        {note.status === 'processed' ? 'OK' : 'Pendente'}
                                     </span>
                                 </div>
-                                <div className="col-span-2 text-right">
+                                <div className="col-span-1 text-right">
                                     <button
                                         onClick={() => handleDownloadXml(note.xml_url)}
                                         className="text-brand-600 hover:text-brand-800 p-1 hover:bg-brand-50 rounded transition"

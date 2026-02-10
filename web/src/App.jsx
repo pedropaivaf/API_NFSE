@@ -6,6 +6,7 @@ import DashboardHome from './pages/DashboardHome';
 import Companies from './pages/Companies';
 import NfseList from './pages/NfseList';
 import Settings from './pages/Settings';
+import Users from './pages/Users';
 import Layout from './components/Layout';
 
 function App() {
@@ -18,6 +19,7 @@ function App() {
             <Route index element={<DashboardHome />} />
             <Route path="companies" element={<Companies />} />
             <Route path="nfs" element={<NfseList />} />
+            <Route path="users" element={<Users />} />
             <Route path="settings" element={<Settings />} />
           </Route>
         </Routes>
