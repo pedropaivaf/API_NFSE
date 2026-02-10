@@ -4,6 +4,12 @@ const router = express.Router();
 const upload = require('../config/multer');
 const companyController = require('../controllers/companyController');
 
+// GET /companies - List all companies
+router.get('/', companyController.listCompanies);
+
+// GET /companies/local-certificates - List files in V:\Certificado Digital
+router.get('/local-certificates', companyController.listLocalCertificates);
+
 // POST /companies - Register new company + Upload Certificate
 router.post('/', upload.single('certificate'), companyController.createCompany);
 
@@ -12,5 +18,8 @@ router.post('/:id/sync', companyController.syncCompany);
 
 // GET /companies/:id/nfs - List NFS for a company
 router.get('/:id/nfs', companyController.getNfs);
+
+// POST /companies/fetch-notes - On-demand fetch from government API
+router.post('/fetch-notes', companyController.fetchNotes);
 
 module.exports = router;

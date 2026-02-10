@@ -1,6 +1,6 @@
 
 import { Outlet, NavLink } from 'react-router-dom';
-import { LayoutDashboard, Building2, Settings, FileText, LogOut } from 'lucide-react';
+import { LayoutDashboard, Search, Settings, FileText, LogOut } from 'lucide-react';
 
 export default function Layout() {
     return (
@@ -13,7 +13,7 @@ export default function Layout() {
 
                 <nav className="flex-1 p-4 space-y-2">
                     <NavItem to="/dashboard" end icon={<LayoutDashboard size={20} />}>Dashboard</NavItem>
-                    <NavItem to="/dashboard/companies" icon={<Building2 size={20} />}>Empresas</NavItem>
+                    <NavItem to="/dashboard/companies" icon={<Search size={20} />}>Buscar Nota</NavItem>
                     <NavItem to="/dashboard/nfs" icon={<FileText size={20} />}>Notas Fiscais</NavItem>
                     <NavItem to="/dashboard/settings" icon={<Settings size={20} />}>Configurações</NavItem>
                 </nav>

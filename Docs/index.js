@@ -8,7 +8,7 @@ function salvarXml(conteudoBase64, chaveAcesso, nomeCliente) {
     try {
         const buffer = zlib.gunzipSync(Buffer.from(conteudoBase64, 'base64'));
         const pasta = `./notas_baixadas/${nomeCliente}`;
-        
+
         if (!fs.existsSync(pasta)) fs.mkdirSync(pasta, { recursive: true });
 
         fs.writeFileSync(`${pasta}/${chaveAcesso}.xml`, buffer);
@@ -33,7 +33,7 @@ async function processarTodosOsClientes() {
             });
 
             const api = axios.create({ httpsAgent: agente });
-            
+
             // URL de Produção Nacional para o dono do certificado
             const url = `https://adn.nfse.gov.br/contribuintes/DFe/0`;
 
@@ -42,7 +42,7 @@ async function processarTodosOsClientes() {
             if (resposta.data.StatusProcessamento === "DOCUMENTOS_LOCALIZADOS") {
                 const notas = resposta.data.LoteDFe;
                 console.log(`   ✅ ${notas.length} notas encontradas.`);
-                
+
                 notas.forEach(nota => salvarXml(nota.ArquivoXml, nota.ChaveAcesso, cliente.nome));
             } else {
                 console.log(`   ℹ️ Nenhuma nota nova.`);
