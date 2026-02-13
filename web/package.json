@@ -44,7 +44,7 @@
   "main": "electron/main.cjs",
   "build": {
     "appId": "com.antigravity.nfse",
-    "productName": "API NFSe SaaS",
+    "productName": "API NFSe",
     "directories": {
       "output": "dist-electron"
     },

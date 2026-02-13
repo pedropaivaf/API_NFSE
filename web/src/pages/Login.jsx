@@ -50,7 +50,7 @@ export default function Login() {
                         <ShieldCheck className="w-8 h-8 text-brand-600" />
                     </div>
                     <h1 className="text-2xl font-bold text-slate-900">Acesso ao Sistema</h1>
-                    <p className="text-slate-500">API NFSe SaaS Manager</p>
+                    <p className="text-slate-500">API NFSe Manager</p>
                 </div>
 
                 <form onSubmit={handleLogin} className="space-y-4">

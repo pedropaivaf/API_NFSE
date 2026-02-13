@@ -24,7 +24,7 @@ export default function Layout() {
             {/* Sidebar */}
             <aside className="w-64 bg-slate-900 text-white flex flex-col">
                 <div className="p-6 border-b border-slate-800">
-                    <h2 className="text-xl font-bold tracking-tight">API NFSe <span className="text-brand-500">SaaS</span></h2>
+                    <h2 className="text-xl font-bold tracking-tight">API NFSe</h2>
                 </div>
 
                 <nav className="flex-1 p-4 space-y-2">
