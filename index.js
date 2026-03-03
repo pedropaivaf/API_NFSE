@@ -3,21 +3,25 @@ const axios = require('axios');
 const https = require('https');
 const fs = require('fs');
 const zlib = require('zlib');
+const { promisify } = require('util');
+const gunzipAsync = promisify(zlib.gunzip);
 
 /**
  * Função para converter o conteúdo do Governo (Base64 + GZIP) em arquivo XML real
  */
-function salvarXml(conteudoBase64, chaveAcesso) {
+async function salvarXml(conteudoBase64, chaveAcesso) {
     try {
         // 1. Converte Base64 para binário (Buffer)
         const bufferCompactado = Buffer.from(conteudoBase64, 'base64');
 
         // 2. Descompacta o GZIP (padrão do portal nacional)
-        const xmlDescompactado = zlib.gunzipSync(bufferCompactado);
+        // Otimização de performance: usa descompactação assíncrona para não bloquear a thread principal
+        const xmlDescompactado = await gunzipAsync(bufferCompactado);
 
         // 3. Define o nome do arquivo e salva na pasta do projeto
+        // Otimização de performance: usa I/O de arquivo assíncrono para não bloquear a thread principal
         const nomeArquivo = `./${chaveAcesso}.xml`;
-        fs.writeFileSync(nomeArquivo, xmlDescompactado);
+        await fs.promises.writeFile(nomeArquivo, xmlDescompactado);
 
         console.log(`   💾 Arquivo salvo com sucesso: ${nomeArquivo}`);
     } catch (erro) {
@@ -61,15 +65,17 @@ async function buscarNotasProducao() {
             console.log(`✅ Sucesso! ${dados.LoteDFe.length} documentos encontrados.`);
             
             // Percorre cada nota encontrada no lote
-            dados.LoteDFe.forEach((item, index) => {
+            // Otimização de performance: usa Promise.all para processar todos os documentos do lote de forma concorrente,
+            // reduzindo o tempo total de execução.
+            await Promise.all(dados.LoteDFe.map(async (item, index) => {
                 console.log(`\n[Nota ${index + 1}] Chave: ${item.ChaveAcesso}`);
                 
                 if (item.ArquivoXml) {
-                    salvarXml(item.ArquivoXml, item.ChaveAcesso);
+                    await salvarXml(item.ArquivoXml, item.ChaveAcesso);
                 } else {
                     console.log("   ⚠️ Nota sem conteúdo XML disponível no lote.");
                 }
-            });
+            }));
 
             console.log("\n--- Processamento Finalizado ---");
         } else {
