@@ -29,7 +29,7 @@ export default function Layout() {
 
                 <nav className="flex-1 p-4 space-y-2">
                     <NavItem to="/dashboard" end icon={<LayoutDashboard size={20} />}>Dashboard</NavItem>
-                    <NavItem to="/dashboard/companies" icon={<Search size={20} />}>Buscar Nota</NavItem>
+                    <NavItem to="/dashboard/buscar-nota" icon={<Search size={20} />}>Buscar Nota</NavItem>
                     <NavItem to="/dashboard/nfs" icon={<FileText size={20} />}>Notas Fiscais</NavItem>
                     {userRole === 'ADMIN' && (
                         <NavItem to="/dashboard/users" icon={<Users size={20} />}>Usuários</NavItem>

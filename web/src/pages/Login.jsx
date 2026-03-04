@@ -1,92 +1,127 @@
-
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ShieldCheck, Eye, EyeOff, Loader2 } from 'lucide-react';
+import axios from 'axios';
+import { KeyRound, Loader2, AlertCircle } from 'lucide-react';
+
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
 export default function Login() {
     const navigate = useNavigate();
     const [loading, setLoading] = useState(false);
-    const [showPassword, setShowPassword] = useState(false);
+    const [accessKey, setAccessKey] = useState('');
+    const [rememberKey, setRememberKey] = useState(false);
+    const [error, setError] = useState(null);
 
-    const handleLogin = (e) => {
+    // Carrega a chave salva automaticamente se existir
+    useEffect(() => {
+        const savedKey = localStorage.getItem('savedAccessKey');
+        if (savedKey) {
+            setAccessKey(savedKey);
+            setRememberKey(true);
+        }
+    }, []);
+
+    const handleLogin = async (e) => {
         e.preventDefault();
         setLoading(true);
+        setError(null);
 
-        const email = e.target[0].value;
-        const password = e.target[1].value;
+        // 1. Acesso Fixo de Emergência (Se a internet cair, você ainda entra)
+        if (accessKey === 'admin' || accessKey === 'ADMIN-MASTER-KEY') {
+            localStorage.setItem('isAuthenticated', 'true');
+            localStorage.setItem('userRole', 'ADMIN');
+            localStorage.setItem('userName', 'Super Administrador');
 
-        setTimeout(() => {
-            // Admin hardcoded check
-            if (email === 'admin' && password === 'adm1234') {
-                localStorage.setItem('isAuthenticated', 'true');
-                localStorage.setItem('userRole', 'ADMIN');
-                localStorage.setItem('userName', 'Administrador');
-                navigate('/dashboard');
-                setLoading(false);
-                return;
-            }
+            // --- AS LINHAS CORRIGIDAS ESTÃO AQUI ---
+            localStorage.setItem('userAccessKey', 'ADMIN-MASTER-KEY');
+            localStorage.setItem('userPlan', 'ILIMITADO');
+            localStorage.setItem('userExpiresAt', '');
+            localStorage.setItem('userIsActive', 'true');
+            // ----------------------------------------
 
-            // Check for other users in localStorage
-            const users = JSON.parse(localStorage.getItem('users') || '[]');
-            const user = users.find(u => u.email === email && u.password === password);
+            navigate('/dashboard');
+            return; // Termina a função aqui para não tentar ir no banco
+        }
 
-            if (user) {
-                localStorage.setItem('isAuthenticated', 'true');
-                localStorage.setItem('userRole', user.role || 'USER');
-                localStorage.setItem('userName', user.name);
-                navigate('/dashboard');
+        // 2. Acesso via Banco de Dados
+        try {
+            const res = await axios.post(`${API_URL}/users/login`, { access_key: accessKey });
+            const { user } = res.data;
+
+            // Salva ou remove a chave do PC conforme o checkbox
+            if (rememberKey) {
+                localStorage.setItem('savedAccessKey', accessKey);
             } else {
-                alert('Credenciais inválidas!');
+                localStorage.removeItem('savedAccessKey');
             }
+
+            localStorage.setItem('isAuthenticated', 'true');
+            localStorage.setItem('userRole', user.role || 'USER');
+            localStorage.setItem('userName', user.name);
+            localStorage.setItem('userAccessKey', user.access_key);
+            localStorage.setItem('userPlan', user.plan_type);
+            localStorage.setItem('userExpiresAt', user.expires_at || '');
+            localStorage.setItem('userIsActive', user.is_active);
+
+            navigate('/dashboard');
+
+        } catch (err) {
+            setError(err.response?.data?.error || 'Erro ao validar a chave com o servidor.');
+        } finally {
             setLoading(false);
-        }, 1000);
+        }
     };
 
     return (
         <div className="flex items-center justify-center min-h-screen bg-brand-50">
             <div className="w-full max-w-md p-8 bg-white rounded-2xl shadow-xl border border-brand-100">
                 <div className="flex flex-col items-center mb-8">
-                    <div className="bg-brand-100 p-3 rounded-full mb-4">
-                        <ShieldCheck className="w-8 h-8 text-brand-600" />
+                    <div className="bg-brand-100 p-4 rounded-full mb-4">
+                        <KeyRound className="w-8 h-8 text-brand-600" />
                     </div>
-                    <h1 className="text-2xl font-bold text-slate-900">Acesso ao Sistema</h1>
-                    <p className="text-slate-500">API NFSe Manager</p>
+                    <h1 className="text-2xl font-bold text-slate-900">Licença de Acesso</h1>
+                    <p className="text-slate-500 text-center mt-1">Insira a sua chave de ativação para acessar o sistema.</p>
                 </div>
 
-                <form onSubmit={handleLogin} className="space-y-4">
+                {error && (
+                    <div className="mb-4 p-3 bg-red-50 text-red-600 text-sm rounded-lg border border-red-100 flex items-center gap-2">
+                        <AlertCircle size={18} />
+                        {error}
+                    </div>
+                )}
+
+                <form onSubmit={handleLogin} className="space-y-6">
                     <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-1">Email ou Usuário</label>
+                        <label className="block text-sm font-medium text-slate-700 mb-2">Chave de Acesso</label>
                         <input
                             type="text"
-                            className="w-full px-4 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-brand-500 focus:outline-none"
-                            placeholder="admin"
-                            defaultValue="admin"
+                            required
+                            className="w-full px-4 py-3 rounded-lg border border-slate-300 focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none font-mono text-center tracking-widest uppercase text-slate-800"
+                            placeholder="XXXX-XXXX-XXXX"
+                            value={accessKey}
+                            onChange={(e) => setAccessKey(e.target.value.toUpperCase())}
                         />
                     </div>
-                    <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-1">Senha</label>
-                        <div className="relative">
-                            <input
-                                type={showPassword ? "text" : "password"}
-                                className="w-full px-4 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-brand-500 focus:outline-none pr-10"
-                                placeholder="••••••••"
-                                defaultValue="adm1234"
-                            />
-                            <button
-                                type="button"
-                                onClick={() => setShowPassword(!showPassword)}
-                                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-brand-600 transition"
-                            >
-                                {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
-                            </button>
-                        </div>
+
+                    <div className="flex items-center">
+                        <input
+                            id="remember"
+                            type="checkbox"
+                            className="w-4 h-4 text-brand-600 border-gray-300 rounded focus:ring-brand-500"
+                            checked={rememberKey}
+                            onChange={(e) => setRememberKey(e.target.checked)}
+                        />
+                        <label htmlFor="remember" className="ml-2 text-sm text-slate-600 cursor-pointer">
+                            Salvar chave para o próximo acesso
+                        </label>
                     </div>
+
                     <button
                         type="submit"
                         disabled={loading}
-                        className="w-full py-3 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 transition flex items-center justify-center gap-2 shadow-sm"
+                        className="w-full py-3 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 transition flex items-center justify-center gap-2 shadow-sm disabled:opacity-70"
                     >
-                        {loading ? <Loader2 className="animate-spin" /> : 'Entrar'}
+                        {loading ? <Loader2 className="animate-spin" /> : 'Acessar Sistema'}
                     </button>
                 </form>
             </div>

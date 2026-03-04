@@ -9,7 +9,10 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "electron:dev": "concurrently \"vite\" \"wait-on tcp:5173 && electron .\"",
-    "electron:build": "vite build && electron-builder"
+    "electron:build": "vite build && electron-builder",
+    "release:patch": "npm version patch && npm run electron:build && git push --follow-tags",
+    "release:minor": "npm version minor && npm run electron:build && git push --follow-tags",
+    "release:major": "npm version major && npm run electron:build && git push --follow-tags"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.95.3",

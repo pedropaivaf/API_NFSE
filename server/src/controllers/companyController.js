@@ -125,16 +125,9 @@ exports.syncCompany = async (req, res) => {
 exports.getAllNfs = async (req, res) => {
     try {
         // Fetch all NFs joined with company info
-        // Note: This requires a foreign key relationship between nfs_docs.company_id and companies.id
         const { data, error } = await supabase
-            .from('nfs_docs')
-            .select(`
-                *,
-                companies (
-                    name,
-                    cnpj
-                )
-            `)
+            .from('nfs')
+            .select('*, companies(name, cnpj)')
             .order('issue_date', { ascending: false });
 
         if (error) throw error;
@@ -153,7 +146,7 @@ exports.getNfs = async (req, res) => {
     if (!id) return res.status(400).json({ error: 'Company ID is required' });
 
     const { data, error } = await supabase
-        .from('nfs_docs')
+        .from('nfs')
         .select('*')
         .eq('company_id', id)
         .order('issue_date', { ascending: false });
