@@ -87,9 +87,10 @@ export default function NfseList() {
                 </div>
 
                 <div className="relative">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={20} aria-hidden="true" />
                     <input
-                        type="text"
+                        type="search"
+                        aria-label="Buscar notas fiscais"
                         placeholder="Buscar por nome da empresa, chave..."
                         className="pl-10 pr-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 focus:outline-none w-full md:w-80"
                         value={searchTerm}
@@ -125,12 +126,28 @@ export default function NfseList() {
                 {/* Table Body */}
                 {loadingNfs ? (
                     <div className="py-20 text-center text-slate-400 flex flex-col items-center">
-                        <Loader2 className="animate-spin mb-2" size={24} />
-                        Carregando notas...
+                        <Loader2 className="animate-spin mb-2" size={24} aria-hidden="true" />
+                        <span aria-live="polite">Carregando notas...</span>
                     </div>
                 ) : filteredNfs.length === 0 ? (
-                    <div className="py-20 text-center text-slate-400">
-                        {searchTerm ? 'Nenhuma nota encontrada para sua busca.' : 'Nenhuma nota fiscal encontrada no sistema.'}
+                    <div className="py-20 flex flex-col items-center justify-center text-slate-500">
+                        {searchTerm ? (
+                            <>
+                                <div className="bg-slate-100 p-3 rounded-full mb-3">
+                                    <Search size={28} className="text-slate-400" aria-hidden="true" />
+                                </div>
+                                <p className="font-medium text-slate-700">Nenhuma nota encontrada</p>
+                                <p className="text-sm mt-1">Não encontramos resultados para "{searchTerm}".</p>
+                            </>
+                        ) : (
+                            <>
+                                <div className="bg-slate-100 p-3 rounded-full mb-3">
+                                    <FileText size={28} className="text-slate-400" aria-hidden="true" />
+                                </div>
+                                <p className="font-medium text-slate-700">Ainda não há notas fiscais</p>
+                                <p className="text-sm mt-1">As notas processadas aparecerão aqui.</p>
+                            </>
+                        )}
                     </div>
                 ) : (
                     <div className="divide-y divide-slate-100">
@@ -157,10 +174,11 @@ export default function NfseList() {
                                 <div className="col-span-1 text-right">
                                     <button
                                         onClick={() => handleDownloadXml(note.xml_url)}
-                                        className="text-brand-600 hover:text-brand-800 p-1 hover:bg-brand-50 rounded transition"
+                                        className="text-brand-600 hover:text-brand-800 p-1 hover:bg-brand-50 focus-visible:ring-2 focus-visible:ring-brand-500 focus:outline-none rounded transition"
+                                        aria-label={`Baixar XML da nota ${note.access_key}`}
                                         title="Baixar XML"
                                     >
-                                        <Download size={18} />
+                                        <Download size={18} aria-hidden="true" />
                                     </button>
                                 </div>
                             </div>

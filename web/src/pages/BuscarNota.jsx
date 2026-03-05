@@ -33,7 +33,7 @@ export default function BuscarNota() {
                     } else {
                         setLocalFiles(result.files || []);
                     }
-                } catch (err) {
+                } catch {
                     setError("Erro ao carregar certificados do Electron IPC.");
                 } finally {
                     setLoadingFiles(false);
