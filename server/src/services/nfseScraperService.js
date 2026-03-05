@@ -3,7 +3,7 @@ const https = require('https');
 const fs = require('fs');
 const fsPromises = require('fs').promises;
 const path = require('path');
-const { wrapper } = require('axios-cookiejar-support');
+// NOTA: axios-cookiejar-support é ESM-only, será importado dinamicamente
 const { CookieJar } = require('tough-cookie');
 const cheerio = require('cheerio');
 
@@ -52,6 +52,8 @@ class NfseScraperService {
 
             // "wrapper" do axios-cookiejar-support envolve o axios e gerencia
             // automaticamente os <Set-Cookie> e redirects
+            // NOTA: import() dinâmico porque o pacote é ESM-only (incompatível com require)
+            const { wrapper } = await import('axios-cookiejar-support');
             const apiClient = wrapper(axios.create({
                 jar,
                 httpsAgent,
