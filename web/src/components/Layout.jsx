@@ -2,6 +2,7 @@
 import { useEffect } from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { LayoutDashboard, Search, Settings, FileText, LogOut, Users } from 'lucide-react';
+import packageJson from '../../package.json';
 
 export default function Layout() {
     const navigate = useNavigate();
@@ -42,6 +43,9 @@ export default function Layout() {
                         <LogOut size={20} />
                         <span>Sair</span>
                     </button>
+                    <div className="mt-4 px-4 text-xs text-slate-600 font-medium">
+                        v{packageJson.version}
+                    </div>
                 </div>
             </aside>
 
