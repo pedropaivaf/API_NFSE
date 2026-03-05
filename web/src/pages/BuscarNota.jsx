@@ -1,15 +1,18 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
-import { Search, ShieldCheck, Download, Calendar, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
+import { Search, ShieldCheck, Download, Calendar, CheckCircle2, AlertCircle, Loader2, Building2 } from 'lucide-react';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
 export default function BuscarNota() {
     const [loading, setLoading] = useState(false);
     const [localFiles, setLocalFiles] = useState([]);
+    const [companies, setCompanies] = useState([]);
     const [loadingFiles, setLoadingFiles] = useState(false);
+    const [loadingCompanies, setLoadingCompanies] = useState(false);
 
     const [formData, setFormData] = useState({
+        companyId: '',
         certificateFilename: '',
         password: '',
         type: 'emitidas',
@@ -23,9 +26,12 @@ export default function BuscarNota() {
     const [success, setSuccess] = useState(null);
 
     useEffect(() => {
-        const fetchLocalCerts = async () => {
+        const fetchData = async () => {
+            setLoadingFiles(true);
+            setLoadingCompanies(true);
+
+            // Fetch Certificates
             if (window.electronAPI?.getLocalCertificates) {
-                setLoadingFiles(true);
                 try {
                     const result = await window.electronAPI.getLocalCertificates();
                     if (result.error) {
@@ -34,15 +40,24 @@ export default function BuscarNota() {
                         setLocalFiles(result.files || []);
                     }
                 } catch (err) {
-                    setError("Erro ao carregar certificados do Electron IPC.");
+                    console.error("IPC Error:", err);
                 } finally {
                     setLoadingFiles(false);
                 }
-            } else {
-                setError("Ambiente Desktop não detectado (Electron API indisponível).");
+            }
+
+            // Fetch Companies
+            try {
+                const res = await axios.get(`${API_URL}/companies`);
+                setCompanies(res.data || []);
+            } catch (err) {
+                console.error("Fetch Companies Error:", err);
+            } finally {
+                setLoadingCompanies(false);
             }
         };
-        fetchLocalCerts();
+
+        fetchData();
     }, []);
 
     const handleChange = (e) => setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -54,6 +69,7 @@ export default function BuscarNota() {
         setLoading(true);
 
         try {
+            if (!formData.companyId) throw new Error("Selecione a Empresa de destino.");
             if (!formData.certificateFilename) throw new Error("Selecione um certificado digital A1.");
             if (!formData.password) throw new Error("A senha do certificado é obrigatória.");
 
@@ -94,9 +110,37 @@ export default function BuscarNota() {
                             <div>
                                 <strong className="block font-semibold mb-1">Processo Finalizado/Iniciado com Sucesso!</strong>
                                 {success.message || "O robô processou a extração com êxito."}
+                                {success.count !== undefined && (
+                                    <span className="block mt-1 font-medium italic">
+                                        Total de {success.count} notas salvas no banco de dados.
+                                    </span>
+                                )}
                             </div>
                         </div>
                     )}
+
+                    {/* Bloco 0: Seleção de Empresa */}
+                    <div className="space-y-4">
+                        <div className="flex items-center gap-2 border-b border-slate-100 pb-2 text-slate-800 font-semibold text-sm uppercase tracking-wider">
+                            <Building2 size={18} className="text-brand-500" />
+                            0. Destino dos Dados
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-1">Empresa no Sistema</label>
+                            <select
+                                name="companyId"
+                                value={formData.companyId}
+                                onChange={handleChange}
+                                className="w-full h-11 px-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none text-sm transition bg-white"
+                                required
+                            >
+                                <option value="">Selecione a Empresa</option>
+                                {companies.map(c => (
+                                    <option key={c.id} value={c.id}>{c.name} ({c.cnpj})</option>
+                                ))}
+                            </select>
+                        </div>
+                    </div>
 
                     {/* Bloco 1: Certificado Digital */}
                     <div className="space-y-4">
@@ -218,7 +262,7 @@ export default function BuscarNota() {
                             {loading ? (
                                 <>
                                     <Loader2 className="animate-spin" size={24} />
-                                    Conectando ao Gov.br, por favor aguarde...
+                                    Extraindo e salvando notas...
                                 </>
                             ) : (
                                 <>
