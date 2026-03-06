@@ -1,5 +1,16 @@
 const express = require('express');
 const cors = require('cors');
+
+// Polyfill global.File para compatibilidade do Supabase/Undici com o Node 18 interno do Electron
+if (typeof File === 'undefined') {
+    global.File = class File extends Blob {
+        constructor(fileBits, fileName, options) {
+            super(fileBits, options);
+            this.name = fileName;
+        }
+    };
+}
+
 require('dotenv').config();
 
 const app = express();

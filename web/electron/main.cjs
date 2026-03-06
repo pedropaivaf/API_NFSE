@@ -30,14 +30,31 @@ function startServer() {
         // Define explicitamente o diretório do servidor na versão compilada (Produção)
         const serverDirProd = path.join(process.resourcesPath, 'server');
         scriptPath = path.join(serverDirProd, 'src/index.js');
+        const polyfillPath = path.join(serverDirProd, 'preload-polyfills.js');
+
+        // Debug log para capturar erros do backend em produção
+        const logPath = path.join(app.getPath('userData'), 'server-debug.log');
+        const logStream = fs.createWriteStream(logPath, { flags: 'w' });
+        logStream.write('--- STARTING BACKGROUND SERVER ---\n');
+        logStream.write('Script path: ' + scriptPath + '\n');
+        logStream.write('Polyfill path: ' + polyfillPath + '\n');
 
         try {
             serverProcess = fork(scriptPath, [], {
-                cwd: serverDirProd, // <-- CRUCIAL: Acha o .env dentro da pasta instalada no cliente
-                env: { ...process.env, PORT: 3000, NODE_ENV: 'production' }
+                cwd: serverDirProd,
+                env: { ...process.env, PORT: 3000, NODE_ENV: 'production' },
+                execArgv: ['--require', polyfillPath],
+                stdio: ['pipe', 'pipe', 'pipe', 'ipc']
             });
+
+            serverProcess.stdout.on('data', (data) => logStream.write('[stdout] ' + data));
+            serverProcess.stderr.on('data', (data) => logStream.write('[stderr] ' + data));
+            serverProcess.on('error', (err) => logStream.write('[error] ' + err.message + '\n'));
+            serverProcess.on('exit', (code) => logStream.write('Worker process exited with code ' + code + '\n'));
+
             console.log('Backend server started (Prod) PID:', serverProcess.pid);
         } catch (e) {
+            logStream.write('[FATAL] ' + e.message + '\n');
             console.error('Failed to start server:', e);
         }
     }

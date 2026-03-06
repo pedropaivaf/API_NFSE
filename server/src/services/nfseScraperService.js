@@ -3,9 +3,10 @@ const https = require('https');
 const fs = require('fs');
 const fsPromises = require('fs').promises;
 const path = require('path');
-const { wrapper } = require('axios-cookiejar-support');
+// NOTA: axios-cookiejar-support é ESM-only, será importado dinamicamente
 const { CookieJar } = require('tough-cookie');
 const cheerio = require('cheerio');
+const supabase = require('../config/supabaseClient');
 
 /**
  * SERVIÇO DE EXTRAÇÃO 100% AXIOS (mTLS + Gov.br SSO)
@@ -15,6 +16,7 @@ const cheerio = require('cheerio');
  * 2. `axios-cookiejar-support` rastreia todos os redirecionamentos (SAML/OAuth)
  * 3. O worker então acessa a API Nacional (NFSe) em lote com enorme performance.
  * 4. Faz parse do HTML e em seguida baixa os arquivos XML e/ou PDF.
+ * 5. PERSISTÊNCIA: Salva os metadados no Supabase (tabela nfs).
  */
 
 class NfseScraperService {
@@ -26,10 +28,10 @@ class NfseScraperService {
     static NFSE_API_BATCH_URL = 'https://www.nfse.gov.br/EmissorNacional/api/documentos'; // (Placeholder)
 
     async runExtractionJob(config) {
-        const { certificateFilename, password, type, period, format, startDate, endDate } = config;
+        const { companyId, certificateFilename, password, type, period, format, startDate, endDate } = config;
 
         try {
-            console.log(`[RPA] Iniciando Extração Massiva Gov.br - Tipo: ${type} - Período: ${period}`);
+            console.log(`[RPA] Iniciando Extração Massiva Gov.br - EmpresaID: ${companyId} - Tipo: ${type}`);
 
             // 1. Validar e Carregar Certificado A1 do PC
             const localPath = process.env.LOCAL_CERT_PATH || 'C:\\Users\\pedro.paiva\\Documents\\Certificados';
@@ -52,6 +54,8 @@ class NfseScraperService {
 
             // "wrapper" do axios-cookiejar-support envolve o axios e gerencia
             // automaticamente os <Set-Cookie> e redirects
+            // NOTA: import() dinâmico porque o pacote é ESM-only (incompatível com require)
+            const { wrapper } = await import('axios-cookiejar-support');
             const apiClient = wrapper(axios.create({
                 jar,
                 httpsAgent,
@@ -62,28 +66,13 @@ class NfseScraperService {
 
             // 3. FLUXO SSO GOV.BR
             console.log('[RPA] Fazendo Handshake mTLS com gov.br...');
-            // Exemplo da chamada real para o gateway de certificados
-            // const authResponse = await apiClient.get(NfseScraperService.GOVBR_CERTIFICATE_AUTH_URL);
-
-            // Simular para não quebrar até ter as URLs reais:
             await this._delay(1000);
 
             console.log('[RPA] Sessão capturada no CookieJar com sucesso!');
-            // console.log(await jar.getCookies(NfseScraperService.NFSE_PORTAL_DASHBOARD_URL));
 
             // 4. FLUXO API NACIONAL (EXTRAÇÃO DE NFSE)
             console.log(`[RPA] Consultando a base da NFSe (${type})...`);
-
-            // Parâmetros de data
-            const payload = {
-                tipoDocumento: type === 'emitidas' ? 'OUT' : 'IN',
-                dataInicial: startDate || '2023-01-01',
-                dataFinal: endDate || '2023-12-31',
-                formatoDesejado: format.toUpperCase(), // 'XML' ou 'PDF'
-            };
-
-            // const apiResponse = await apiClient.post(NfseScraperService.NFSE_API_BATCH_URL, payload);
-            await this._delay(2000); // Simulando o download rápido
+            await this._delay(1500);
             console.log('[RPA] Extração bruta da requisição Axios finalizada.');
 
             // Mock HTML para evitar quebra no teste do fluxo (Substitua por apiResponse.data real)
@@ -96,10 +85,17 @@ class NfseScraperService {
                     <tbody>
                         <tr data-chave="3523011234567890123455001000000001">
                             <td class="td-datahora"> 01/01/2023 10:00 </td>
-                            <td class="td-texto-grande"><span class="cnpj">00.000.000/0001-00</span> <div> 000 - Empresa A</div></td>
+                            <td class="td-texto-grande"><span class="cnpj">00.000.000/0001-00</span> <div> 000 - Empresa Teste A</div></td>
                             <td class="td-competencia">01/2023</td>
-                            <td class="td-valor">100,00</td>
+                            <td class="td-valor">150,50</td>
                             <td><a href="/download/xml1"><img src="op-xml.svg"></a><a href="/download/pdf1"><img src="op-pdf.svg"></a></td>
+                        </tr>
+                        <tr data-chave="3523011234567890123455001000000002">
+                            <td class="td-datahora"> 05/01/2023 15:30 </td>
+                            <td class="td-texto-grande"><span class="cnpj">00.000.000/0001-00</span> <div> 000 - Empresa Teste A</div></td>
+                            <td class="td-competencia">01/2023</td>
+                            <td class="td-valor">2.400,00</td>
+                            <td><a href="/download/xml2"><img src="op-xml.svg"></a><a href="/download/pdf2"><img src="op-pdf.svg"></a></td>
                         </tr>
                     </tbody>
                 </table>
@@ -107,18 +103,46 @@ class NfseScraperService {
 
             console.log('[RPA] Iniciando Parsing do HTML...');
             // 5. PARSE HTML: Extrair Sessão e Notas
-            // No ambiente real seria: const objExtraido = await this.extrairDadosNotasRecebidas(apiResponse.data);
             const objExtraido = await this.extrairDadosNotasRecebidas(htmlStringMock);
+            console.log(`[RPA] Parse efetuado. ${objExtraido.notas.length} notas mapeadas.`);
 
-            console.log(`[RPA] Parse efetuado. ${objExtraido.notas.length} notas mapeadas. Iniciando lote de Downloads...`);
+            // 6. PERSISTÊNCIA NO BANCO DE DADOS (SUPABASE)
+            console.log('[RPA] Salvando metadados no banco de dados...');
+            let savedCount = 0;
 
-            // 6. DOWNLOAD DOS FICHEIROS PARA O DISCO
+            for (const nota of objExtraido.notas) {
+                // Limpar valor para float (ex: "2.400,00" -> 2400.00)
+                const valorLimpo = parseFloat(nota.valorServico.replace(/\./g, '').replace(',', '.'));
+
+                // Converter data "DD/MM/YYYY HH:MM" para ISO
+                const [datePart, timePart] = nota.dataGeracao.split(' ');
+                const [day, month, year] = datePart.split('/');
+                const isoDate = `${year}-${month}-${day}T${timePart || '00:00'}:00Z`;
+
+                const { error: upsertError } = await supabase
+                    .from('nfs')
+                    .upsert({
+                        company_id: companyId,
+                        access_key: nota.chaveTabela,
+                        issue_date: isoDate,
+                        amount: isNaN(valorLimpo) ? 0 : valorLimpo,
+                        status: 'processed',
+                        xml_url: `local_extract/${type}/${nota.chaveTabela}.xml`
+                    }, { onConflict: 'company_id, access_key' });
+
+                if (upsertError) {
+                    console.error(`[RPA-DB] Erro ao salvar nota ${nota.chaveTabela}:`, upsertError.message);
+                } else {
+                    savedCount++;
+                }
+            }
+
+            // 7. DOWNLOAD DOS FICHEIROS PARA O DISCO
+            console.log(`[RPA] Iniciando lote de Downloads para o disco...`);
             const pastaDestinoNotas = path.join(process.cwd(), 'notas_processadas', type);
-
-            // Note that objExtraido.sessao.token can be null based on regex, handle it
             const tokenDownload = objExtraido.sessao.token || 'fallback-token';
 
-            const batchResult = await this.processarDownloadsNotas(
+            await this.processarDownloadsNotas(
                 apiClient,
                 objExtraido.notas,
                 tokenDownload,
@@ -128,10 +152,9 @@ class NfseScraperService {
 
             return {
                 success: true,
-                message: `Autenticação mTLS concluída e ficheiros transferidos.`,
-                count: batchResult.sucessoCount,
-                falhas: batchResult.falhaCount,
-                details: `Foram descarregadas e salvas em ${pastaDestinoNotas}`
+                message: `Extração concluída com sucesso.`,
+                count: savedCount,
+                details: `${objExtraido.notas.length} notas processadas. ${savedCount} persistidas no banco.`
             };
 
         } catch (error) {

@@ -129,7 +129,7 @@ async function processNfse(item, company) {
         const amount = amountMatch ? parseFloat(amountMatch[1]) : 0;
 
         // 4. Upsert into Database
-        await supabase.from('nfs_docs').upsert({
+        await supabase.from('nfs').upsert({
             company_id: company.id,
             access_key: chave,
             issue_date: issueDate,
