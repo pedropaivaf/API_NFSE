@@ -333,6 +333,7 @@ export default function BuscarNota() {
                                     onChange={handleChange}
                                 >
                                     <option value="atual">Mês Atual</option>
+                                    <option value="anterior">Mês Anterior</option>
                                     <option value="retroativo">3 Meses Atrás</option>
                                     <option value="ano">Ano Atual</option>
                                     <option value="custom">Personalizado</option>

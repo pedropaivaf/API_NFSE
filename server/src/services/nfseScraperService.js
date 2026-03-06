@@ -41,7 +41,7 @@ class NfseScraperService {
             const httpsAgent = new https.Agent({
                 pfx: certBuffer,
                 passphrase: password,
-                rejectUnauthorized: true,
+                rejectUnauthorized: false, // portal gov.br usa ICP-Brasil — fora do bundle CA do Node.js
             });
             const apiClient = axios.create({
                 httpsAgent,
@@ -127,8 +127,14 @@ class NfseScraperService {
             if (error.code === 'ERR_OSSL_PKCS12_MAC_VERIFY_FAILURE') {
                 throw new Error('Senha do certificado A1 incorreta ou arquivo corrompido.');
             }
-            if (error.response?.status === 401 || error.response?.status === 403) {
-                throw new Error('Gov.br negou acesso. Certificado pode estar revogado ou vencido.');
+            if (error.response) {
+                const debugPath = path.join(process.cwd(), 'debug_gov_response.html');
+                fs.writeFileSync(debugPath, String(error.response.data || ''));
+                console.error('[RPA-DEBUG] Resposta do governo salva em:', debugPath);
+                if (error.response.status === 401 || error.response.status === 403) {
+                    throw new Error('Gov.br negou acesso. Certificado pode estar revogado ou vencido.');
+                }
+                throw new Error(`Portal gov.br retornou status ${error.response.status}. Veja debug_gov_response.html para detalhes.`);
             }
             throw error;
         }
