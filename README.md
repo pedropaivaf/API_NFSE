@@ -127,3 +127,17 @@ API_NFSE/
 ```
 
 > Documentacao completa em [Docs/Context/](Docs/Context/)
+
+---
+
+## Proximo Passo (06/03/2026)
+
+```bash
+git pull origin main
+```
+
+Execute o plano completo em [Docs/Context/PLANO_SCRAPER_NFSE.md](Docs/Context/PLANO_SCRAPER_NFSE.md):
+
+- **Sprint 1** — pode executar imediatamente (validacao de cert, fix IPC, fix schema)
+- **Pre-requisito** — mapear o fluxo de login com Chrome DevTools (HAR export)
+- **Sprint 2 + 3** — login real + scraping real, depois de ter o fluxo mapeado

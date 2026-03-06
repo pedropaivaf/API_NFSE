@@ -43,7 +43,7 @@ export default function Layout() {
                         <LogOut size={20} />
                         <span>Sair</span>
                     </button>
-                    <div className="mt-4 px-4 text-xs text-slate-600 font-medium">
+                    <div className="mt-4 px-4 text-xs text-slate-400 font-medium">
                         v{packageJson.version}
                     </div>
                 </div>
