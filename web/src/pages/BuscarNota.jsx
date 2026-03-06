@@ -1,14 +1,12 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
-import { Search, Loader2, AlertCircle, Building2, HardDrive, Plus, ShieldCheck, Calendar, CheckCircle } from 'lucide-react';
-import AddCompanyModal from '../components/AddCompanyModal';
+import { Search, Loader2, AlertCircle, Building2, HardDrive, ShieldCheck, Calendar, CheckCircle, PlusCircle } from 'lucide-react';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
 export default function BuscarNota() {
     const [loadingCompanies, setLoadingCompanies] = useState(false);
     const [companies, setCompanies] = useState([]);
-    const [isAddModalOpen, setIsAddModalOpen] = useState(false);
 
     const [loadingFiles, setLoadingFiles] = useState(false);
     const [localFiles, setLocalFiles] = useState([]);
@@ -16,6 +14,8 @@ export default function BuscarNota() {
     const [loadingExtrair, setLoadingExtrair] = useState(false);
     const [loadingValidate, setLoadingValidate] = useState(false);
     const [certInfo, setCertInfo] = useState(null);
+    const [companyNotFound, setCompanyNotFound] = useState(false);
+    const [loadingQuickRegister, setLoadingQuickRegister] = useState(false);
     const [error, setError] = useState(null);
     const [success, setSuccess] = useState(null);
 
@@ -73,9 +73,9 @@ export default function BuscarNota() {
 
     const handleChange = (e) => {
         setFormData({ ...formData, [e.target.name]: e.target.value });
-        // Reset cert info when cert or password changes
         if (e.target.name === 'certificateFilename' || e.target.name === 'password') {
             setCertInfo(null);
+            setCompanyNotFound(false);
         }
     };
 
@@ -86,17 +86,50 @@ export default function BuscarNota() {
         }
         setLoadingValidate(true);
         setCertInfo(null);
+        setCompanyNotFound(false);
         setError(null);
         try {
             const res = await axios.post(`${API_URL}/scraper/validate-cert`, {
                 certificateFilename: formData.certificateFilename,
                 password: formData.password,
             });
-            setCertInfo(res.data);
+            const info = res.data;
+            setCertInfo(info);
+
+            // Auto-link: buscar empresa pelo CNPJ do certificado
+            if (info.cnpj) {
+                const cnpjLimpo = info.cnpj.replace(/\D/g, '');
+                const matched = companies.find(c => c.cnpj?.replace(/\D/g, '') === cnpjLimpo);
+                if (matched) {
+                    setFormData(prev => ({ ...prev, companyId: matched.id }));
+                } else {
+                    setCompanyNotFound(true);
+                }
+            }
         } catch (err) {
             setError(err.response?.data?.error || 'Erro ao validar certificado.');
         } finally {
             setLoadingValidate(false);
+        }
+    };
+
+    const handleQuickRegister = async () => {
+        if (!certInfo) return;
+        setLoadingQuickRegister(true);
+        setError(null);
+        try {
+            const res = await axios.post(`${API_URL}/companies/quick`, {
+                name: certInfo.cn,
+                cnpj: certInfo.cnpj?.replace(/\D/g, ''),
+            });
+            const novaEmpresa = res.data;
+            setCompanies(prev => [...prev, novaEmpresa]);
+            setFormData(prev => ({ ...prev, companyId: novaEmpresa.id }));
+            setCompanyNotFound(false);
+        } catch (err) {
+            setError(err.response?.data?.error || 'Erro ao cadastrar empresa.');
+        } finally {
+            setLoadingQuickRegister(false);
         }
     };
 
@@ -162,36 +195,26 @@ export default function BuscarNota() {
                     )}
 
                     {/* 0. DESTINO DOS DADOS */}
-                    <section className="space-y-4">
+                    <section className="space-y-2">
                         <div className="flex items-center gap-2 text-slate-700 font-bold uppercase text-xs tracking-wider">
                             <Building2 size={18} />
                             0. DESTINO DOS DADOS
                         </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
-                            <div className="flex-1">
-                                <label className="block text-sm font-medium text-slate-700 mb-1">Empresa no Sistema</label>
-                                <select
-                                    name="companyId"
-                                    required
-                                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-brand-500 outline-none disabled:bg-slate-50"
-                                    value={formData.companyId}
-                                    onChange={handleChange}
-                                    disabled={loadingCompanies}
-                                >
-                                    <option value="">Selecione a Empresa</option>
-                                    {companies.map(c => (
-                                        <option key={c.id} value={c.id}>{c.name} ({c.cnpj})</option>
-                                    ))}
-                                </select>
-                            </div>
-                            <button
-                                type="button"
-                                onClick={() => setIsAddModalOpen(true)}
-                                className="flex items-center justify-center gap-2 px-4 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition text-sm font-medium"
+                        <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-1">Empresa no Sistema</label>
+                            <select
+                                name="companyId"
+                                required
+                                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-brand-500 outline-none disabled:bg-slate-50"
+                                value={formData.companyId}
+                                onChange={handleChange}
+                                disabled={loadingCompanies}
                             >
-                                <Plus size={16} />
-                                Cadastrar Nova
-                            </button>
+                                <option value="">— Validar certificado para auto-selecionar —</option>
+                                {companies.map(c => (
+                                    <option key={c.id} value={c.id}>{c.name} ({c.cnpj})</option>
+                                ))}
+                            </select>
                         </div>
                         {loadingCompanies && <p className="text-xs text-brand-600 animate-pulse">Carregando empresas...</p>}
                     </section>
@@ -253,15 +276,30 @@ export default function BuscarNota() {
                                 Validar Certificado
                             </button>
                             {certInfo?.valid && (
-                                <div className="flex items-center gap-2 text-sm text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-2">
-                                    <CheckCircle size={16} className="text-green-600 shrink-0" />
-                                    <span>
-                                        <strong>{certInfo.cn}</strong>
-                                        {certInfo.cnpj && <span className="ml-1 text-green-600">({certInfo.cnpj})</span>}
-                                        <span className="ml-2 text-xs text-green-600">
-                                            — vence {new Date(certInfo.notAfter).toLocaleDateString('pt-BR')}
+                                <div className="flex flex-col gap-2">
+                                    <div className="flex items-center gap-2 text-sm text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-2">
+                                        <CheckCircle size={16} className="text-green-600 shrink-0" />
+                                        <span>
+                                            <strong>{certInfo.cn}</strong>
+                                            {certInfo.cnpj && <span className="ml-1 text-green-600">({certInfo.cnpj})</span>}
+                                            <span className="ml-2 text-xs text-green-600">
+                                                — vence {new Date(certInfo.notAfter).toLocaleDateString('pt-BR')}
+                                            </span>
                                         </span>
-                                    </span>
+                                    </div>
+                                    {companyNotFound && (
+                                        <button
+                                            type="button"
+                                            onClick={handleQuickRegister}
+                                            disabled={loadingQuickRegister}
+                                            className="flex items-center gap-2 px-3 py-2 bg-amber-50 text-amber-700 border border-amber-200 rounded-lg hover:bg-amber-100 transition text-sm font-medium disabled:opacity-50"
+                                        >
+                                            {loadingQuickRegister
+                                                ? <Loader2 size={14} className="animate-spin" />
+                                                : <PlusCircle size={14} />}
+                                            Cadastrar "{certInfo.cn}" no sistema
+                                        </button>
+                                    )}
                                 </div>
                             )}
                         </div>
@@ -369,11 +407,6 @@ export default function BuscarNota() {
                 </form>
             </div>
 
-            <AddCompanyModal
-                isOpen={isAddModalOpen}
-                onClose={() => setIsAddModalOpen(false)}
-                onSuccess={fetchCompanies}
-            />
         </div>
     );
 }

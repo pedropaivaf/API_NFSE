@@ -2,6 +2,25 @@
 const supabase = require('../config/supabaseClient');
 const nfseService = require('../services/nfseService');
 
+exports.createQuickCompany = async (req, res) => {
+    const { name, cnpj } = req.body;
+    if (!name || !cnpj) {
+        return res.status(400).json({ error: 'Nome e CNPJ são obrigatórios.' });
+    }
+    try {
+        const { data, error } = await supabase
+            .from('companies')
+            .insert([{ name, cnpj, status: 'active' }])
+            .select()
+            .single();
+        if (error) throw error;
+        res.status(201).json(data);
+    } catch (error) {
+        console.error('Quick Company Error:', error);
+        res.status(500).json({ error: error.message });
+    }
+};
+
 exports.listCompanies = async (req, res) => {
     try {
         const { data, error } = await supabase

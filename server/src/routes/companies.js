@@ -10,6 +10,9 @@ router.get('/', companyController.listCompanies);
 // GET /companies/local-certificates - List files in V:\Certificado Digital
 router.get('/local-certificates', companyController.listLocalCertificates);
 
+// POST /companies/quick - Register company from cert data (no file upload)
+router.post('/quick', companyController.createQuickCompany);
+
 // POST /companies - Register new company + Upload Certificate
 router.post('/', upload.single('certificate'), companyController.createCompany);
 
