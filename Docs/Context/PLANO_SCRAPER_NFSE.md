@@ -1,6 +1,11 @@
 # Plano: Implementacao do Scraper NFSe Real
 
-## Status: IMPLEMENTADO — Aguardando teste com certificado real em producao
+## Status: v0.0.7 PRONTO — Aguardando teste completo em producao
+
+### Bugs corrigidos em v0.0.7 (06/03/2026)
+- CN do certificado `NOME:CNPJ` agora é parseado corretamente — exibe só o nome
+- CNPJ extraído do `rawCn` (antes do parse), não do `cn` já limpo
+- Campo `status: 'active'` removido do insert em `createQuickCompany` e `createCompany` (coluna não existe no schema Supabase)
 
 ---
 
