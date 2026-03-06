@@ -11,6 +11,10 @@ dist/
 build/
 web/dist-electron/
 web/release/
+web/dist-app/
+
+# Temp
+tmp/
 
 # IDE
 .vscode/

@@ -2,6 +2,7 @@ const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
 const { fork } = require('child_process');
 const fs = require('fs');
+const os = require('os');
 
 const isDev = !app.isPackaged;
 
@@ -39,7 +40,14 @@ function startServer() {
         logStream.write('Script path: ' + scriptPath + '\n');
         logStream.write('Polyfill path: ' + polyfillPath + '\n');
 
+        console.log('Production mode: Iniciando servidor no path:', scriptPath);
+
         try {
+            if (!fs.existsSync(scriptPath)) {
+                console.error('CRITICAL ERROR: Server script not found at', scriptPath);
+                return;
+            }
+
             serverProcess = fork(scriptPath, [], {
                 cwd: serverDirProd,
                 env: { ...process.env, PORT: 3000, NODE_ENV: 'production' },
@@ -85,15 +93,15 @@ function createWindow() {
 }
 
 ipcMain.handle('get-local-certificates', async () => {
-    const localPath = 'C:\\Users\\pedro.paiva\\Documents\\Certificados';
+    const certDir = path.join(os.homedir(), 'Documents', 'Certificados');
     try {
-        if (!fs.existsSync(localPath)) {
-            return { path: localPath, files: [], error: 'Diretório não encontrado: ' + localPath };
+        if (!fs.existsSync(certDir)) {
+            return { path: certDir, files: [], error: 'Diretório não encontrado: ' + certDir };
         }
-        const files = fs.readdirSync(localPath).filter(file => file.toLowerCase().endsWith('.pfx'));
-        return { path: localPath, files };
+        const files = fs.readdirSync(certDir).filter(file => file.toLowerCase().endsWith('.pfx'));
+        return { path: certDir, files };
     } catch (error) {
-        return { path: localPath, files: [], error: error.message };
+        return { path: certDir, files: [], error: error.message };
     }
 });
 

@@ -1,36 +1,52 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
-import { Search, ShieldCheck, Download, Calendar, CheckCircle2, AlertCircle, Loader2, Building2 } from 'lucide-react';
+import { Search, Loader2, AlertCircle, Building2, HardDrive, Plus, ShieldCheck, Calendar, CheckCircle } from 'lucide-react';
+import AddCompanyModal from '../components/AddCompanyModal';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
 export default function BuscarNota() {
-    const [loading, setLoading] = useState(false);
-    const [localFiles, setLocalFiles] = useState([]);
-    const [companies, setCompanies] = useState([]);
-    const [loadingFiles, setLoadingFiles] = useState(false);
     const [loadingCompanies, setLoadingCompanies] = useState(false);
+    const [companies, setCompanies] = useState([]);
+    const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+
+    const [loadingFiles, setLoadingFiles] = useState(false);
+    const [localFiles, setLocalFiles] = useState([]);
+
+    const [loadingExtrair, setLoadingExtrair] = useState(false);
+    const [loadingValidate, setLoadingValidate] = useState(false);
+    const [certInfo, setCertInfo] = useState(null);
+    const [error, setError] = useState(null);
+    const [success, setSuccess] = useState(null);
 
     const [formData, setFormData] = useState({
         companyId: '',
         certificateFilename: '',
         password: '',
-        type: 'emitidas',
+        type: 'recebidas',
         period: 'atual',
-        startDate: '',
-        endDate: '',
         format: 'xml',
+        startDate: '',
+        endDate: ''
     });
 
-    const [error, setError] = useState(null);
-    const [success, setSuccess] = useState(null);
+    const fetchCompanies = async () => {
+        setLoadingCompanies(true);
+        try {
+            const res = await axios.get(`${API_URL}/companies`);
+            setCompanies(res.data || []);
+            setError(null); // Clear previous errors if successful
+        } catch (err) {
+            console.error("Fetch Companies Error:", err);
+            setError("Não foi possível carregar a lista de empresas. O backend está rodando?");
+        } finally {
+            setLoadingCompanies(false);
+        }
+    };
 
     useEffect(() => {
-        const fetchData = async () => {
+        const fetchFiles = async () => {
             setLoadingFiles(true);
-            setLoadingCompanies(true);
-
-            // Fetch Certificates
             if (window.electronAPI?.getLocalCertificates) {
                 try {
                     const result = await window.electronAPI.getLocalCertificates();
@@ -41,228 +57,306 @@ export default function BuscarNota() {
                     }
                 } catch (err) {
                     console.error("IPC Error:", err);
+                    setError("Não foi possível carregar os certificados locais.");
                 } finally {
                     setLoadingFiles(false);
                 }
-            }
-
-            // Fetch Companies
-            try {
-                const res = await axios.get(`${API_URL}/companies`);
-                setCompanies(res.data || []);
-            } catch (err) {
-                console.error("Fetch Companies Error:", err);
-            } finally {
-                setLoadingCompanies(false);
+            } else {
+                setError("Funcionalidade de certificados locais não disponível (apenas no Electron).");
+                setLoadingFiles(false);
             }
         };
 
-        fetchData();
+        fetchCompanies();
+        fetchFiles();
     }, []);
 
-    const handleChange = (e) => setFormData({ ...formData, [e.target.name]: e.target.value });
+    const handleChange = (e) => {
+        setFormData({ ...formData, [e.target.name]: e.target.value });
+        // Reset cert info when cert or password changes
+        if (e.target.name === 'certificateFilename' || e.target.name === 'password') {
+            setCertInfo(null);
+        }
+    };
+
+    const handleValidateCert = async () => {
+        if (!formData.certificateFilename || !formData.password) {
+            setError('Selecione o certificado e informe a senha para validar.');
+            return;
+        }
+        setLoadingValidate(true);
+        setCertInfo(null);
+        setError(null);
+        try {
+            const res = await axios.post(`${API_URL}/scraper/validate-cert`, {
+                certificateFilename: formData.certificateFilename,
+                password: formData.password,
+            });
+            setCertInfo(res.data);
+        } catch (err) {
+            setError(err.response?.data?.error || 'Erro ao validar certificado.');
+        } finally {
+            setLoadingValidate(false);
+        }
+    };
 
     const handleSubmit = async (e) => {
         e.preventDefault();
         setError(null);
         setSuccess(null);
-        setLoading(true);
+
+        if (!formData.companyId) {
+            setError("Selecione uma Empresa no Sistema para salvar as notas.");
+            return;
+        }
+        if (!formData.certificateFilename) {
+            setError("Selecione um certificado digital A1.");
+            return;
+        }
+        if (!formData.password) {
+            setError("A senha do certificado é obrigatória.");
+            return;
+        }
+
+        setLoadingExtrair(true);
 
         try {
-            if (!formData.companyId) throw new Error("Selecione a Empresa de destino.");
-            if (!formData.certificateFilename) throw new Error("Selecione um certificado digital A1.");
-            if (!formData.password) throw new Error("A senha do certificado é obrigatória.");
-
             const res = await axios.post(`${API_URL}/scraper/fetch-gov`, formData);
             setSuccess(res.data);
         } catch (err) {
             console.error(err);
-            setError(err.response?.data?.error || err.message || "Erro ao conectar com o serviço Gov.br");
+            setError(err.response?.data?.error || "Erro na extração RPA. Verifique o certificado e senha.");
         } finally {
-            setLoading(false);
+            setLoadingExtrair(false);
         }
     };
 
     return (
-        <div className="max-w-3xl mx-auto space-y-6">
-            <div className="flex items-center gap-3 mb-6">
-                <div className="w-10 h-10 rounded-xl bg-brand-100 flex items-center justify-center text-brand-600">
-                    <Download size={20} />
-                </div>
-                <div>
-                    <h2 className="text-2xl font-bold text-slate-800">Busca em Lote (Gov.br)</h2>
-                    <p className="text-slate-500 text-sm">Automação de extração direta do portal Nacional NFSe</p>
-                </div>
-            </div>
-
-            <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-                <form onSubmit={handleSubmit} className="p-8 space-y-8">
-                    {/* Mensagens de Feedback */}
-                    {error && (
-                        <div className="p-4 bg-red-50 text-red-700 text-sm rounded-xl flex items-start gap-3 border border-red-100">
-                            <AlertCircle size={20} className="shrink-0 mt-0.5" />
-                            <div>{error}</div>
-                        </div>
-                    )}
-                    {success && (
-                        <div className="p-4 bg-green-50 text-green-700 text-sm rounded-xl flex items-start gap-3 border border-green-100">
-                            <CheckCircle2 size={20} className="shrink-0 mt-0.5" />
-                            <div>
-                                <strong className="block font-semibold mb-1">Processo Finalizado/Iniciado com Sucesso!</strong>
-                                {success.message || "O robô processou a extração com êxito."}
-                                {success.count !== undefined && (
-                                    <span className="block mt-1 font-medium italic">
-                                        Total de {success.count} notas salvas no banco de dados.
-                                    </span>
-                                )}
-                            </div>
-                        </div>
-                    )}
-
-                    {/* Bloco 0: Seleção de Empresa */}
-                    <div className="space-y-4">
-                        <div className="flex items-center gap-2 border-b border-slate-100 pb-2 text-slate-800 font-semibold text-sm uppercase tracking-wider">
-                            <Building2 size={18} className="text-brand-500" />
-                            0. Destino dos Dados
-                        </div>
-                        <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-1">Empresa no Sistema</label>
-                            <select
-                                name="companyId"
-                                value={formData.companyId}
-                                onChange={handleChange}
-                                className="w-full h-11 px-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none text-sm transition bg-white"
-                                required
-                            >
-                                <option value="">Selecione a Empresa</option>
-                                {companies.map(c => (
-                                    <option key={c.id} value={c.id}>{c.name} ({c.cnpj})</option>
-                                ))}
-                            </select>
-                        </div>
+        <div className="max-w-4xl mx-auto space-y-6">
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                <div className="px-6 py-4 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
+                    <div>
+                        <h3 className="font-bold text-lg text-slate-800">Busca Massiva de NFSe (Portal Gov.br)</h3>
+                        <p className="text-sm text-slate-500 mt-0.5">O robô usará o certificado mTLS para extrair as notas selecionadas</p>
                     </div>
+                </div>
 
-                    {/* Bloco 1: Certificado Digital */}
-                    <div className="space-y-4">
-                        <div className="flex items-center gap-2 border-b border-slate-100 pb-2 text-slate-800 font-semibold text-sm uppercase tracking-wider">
-                            <ShieldCheck size={18} className="text-brand-500" />
-                            1. Autenticação A1
+                <form onSubmit={handleSubmit} className="p-6 space-y-8">
+                    {error && (
+                        <div className="p-4 bg-red-50 text-red-600 text-sm rounded-lg border border-red-100 flex items-center gap-2">
+                            <AlertCircle size={20} />
+                            {error}
                         </div>
+                    )}
 
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {success && (
+                        <div className="p-4 bg-green-50 text-green-700 text-sm rounded-lg border border-green-100">
+                            <div className="font-bold text-lg flex items-center gap-2 mb-1">
+                                <CheckCircle className="text-green-600" size={24} />
+                                Extração RPA concluída!
+                            </div>
+                            <p>{success.message}</p>
+                            <p className="mt-2 text-green-800 font-medium">{success.count || 0} notas foram salvas com sucesso no banco de dados.</p>
+                            <div className="mt-1 text-xs text-green-600 italic">{success.details}</div>
+                        </div>
+                    )}
+
+                    {/* 0. DESTINO DOS DADOS */}
+                    <section className="space-y-4">
+                        <div className="flex items-center gap-2 text-slate-700 font-bold uppercase text-xs tracking-wider">
+                            <Building2 size={18} />
+                            0. DESTINO DOS DADOS
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
+                            <div className="flex-1">
+                                <label className="block text-sm font-medium text-slate-700 mb-1">Empresa no Sistema</label>
+                                <select
+                                    name="companyId"
+                                    required
+                                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-brand-500 outline-none disabled:bg-slate-50"
+                                    value={formData.companyId}
+                                    onChange={handleChange}
+                                    disabled={loadingCompanies}
+                                >
+                                    <option value="">Selecione a Empresa</option>
+                                    {companies.map(c => (
+                                        <option key={c.id} value={c.id}>{c.name} ({c.cnpj})</option>
+                                    ))}
+                                </select>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => setIsAddModalOpen(true)}
+                                className="flex items-center justify-center gap-2 px-4 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition text-sm font-medium"
+                            >
+                                <Plus size={16} />
+                                Cadastrar Nova
+                            </button>
+                        </div>
+                        {loadingCompanies && <p className="text-xs text-brand-600 animate-pulse">Carregando empresas...</p>}
+                    </section>
+
+                    {/* 1. AUTENTICAÇÃO A1 */}
+                    <section className="space-y-4">
+                        <div className="flex items-center gap-2 text-slate-700 font-bold uppercase text-xs tracking-wider">
+                            <ShieldCheck size={18} />
+                            1. AUTENTICAÇÃO A1
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div>
                                 <label className="block text-sm font-medium text-slate-700 mb-1">Certificado Digital (.pfx)</label>
-                                {loadingFiles ? (
-                                    <div className="flex items-center gap-2 h-11 px-3 border border-slate-200 rounded-xl text-slate-400 bg-slate-50 text-sm">
-                                        <Loader2 className="animate-spin" size={16} /> Carregando do computador...
-                                    </div>
-                                ) : (
+                                <div className="relative">
                                     <select
                                         name="certificateFilename"
+                                        required
+                                        className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-brand-500 outline-none appearance-none disabled:bg-slate-50"
                                         value={formData.certificateFilename}
                                         onChange={handleChange}
-                                        className="w-full h-11 px-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none text-sm transition bg-white"
-                                        required
+                                        disabled={loadingFiles}
                                     >
-                                        <option value="">Selecione um Arquivo</option>
-                                        {localFiles.map(f => (
-                                            <option key={f} value={f}>{f}</option>
+                                        <option value="">Selecione um arquivo...</option>
+                                        {localFiles.map((f, i) => (
+                                            <option key={i} value={f}>{f}</option>
                                         ))}
                                     </select>
-                                )}
+                                    {loadingFiles && (
+                                        <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                                            <Loader2 size={16} className="animate-spin text-brand-600" />
+                                        </div>
+                                    )}
+                                </div>
+                                <p className="text-[10px] text-slate-400 mt-1 flex items-center gap-1">
+                                    <HardDrive size={10} /> Buscando em: %USERPROFILE%\Documents\Certificados
+                                </p>
                             </div>
                             <div>
                                 <label className="block text-sm font-medium text-slate-700 mb-1">Senha do Certificado</label>
                                 <input
-                                    type="password"
                                     name="password"
+                                    required
+                                    type="password"
+                                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-brand-500 outline-none"
                                     value={formData.password}
                                     onChange={handleChange}
-                                    className="w-full h-11 px-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none text-sm transition"
-                                    required
-                                    placeholder="••••••••"
                                 />
                             </div>
                         </div>
-                    </div>
 
-                    {/* Bloco 2: Filtros da Busca */}
-                    <div className="space-y-4">
-                        <div className="flex items-center gap-2 border-b border-slate-100 pb-2 text-slate-800 font-semibold text-sm uppercase tracking-wider">
-                            <Calendar size={18} className="text-brand-500" />
-                            2. Parâmetros da Extração
+                        <div className="flex items-center gap-3">
+                            <button
+                                type="button"
+                                onClick={handleValidateCert}
+                                disabled={loadingValidate || !formData.certificateFilename || !formData.password}
+                                className="flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-700 border border-blue-200 rounded-lg hover:bg-blue-100 transition text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                {loadingValidate ? <Loader2 size={14} className="animate-spin" /> : <ShieldCheck size={14} />}
+                                Validar Certificado
+                            </button>
+                            {certInfo?.valid && (
+                                <div className="flex items-center gap-2 text-sm text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-2">
+                                    <CheckCircle size={16} className="text-green-600 shrink-0" />
+                                    <span>
+                                        <strong>{certInfo.cn}</strong>
+                                        {certInfo.cnpj && <span className="ml-1 text-green-600">({certInfo.cnpj})</span>}
+                                        <span className="ml-2 text-xs text-green-600">
+                                            — vence {new Date(certInfo.notAfter).toLocaleDateString('pt-BR')}
+                                        </span>
+                                    </span>
+                                </div>
+                            )}
                         </div>
+                    </section>
 
+                    {/* 2. PARÂMETROS DA EXTRAÇÃO */}
+                    <section className="space-y-4">
+                        <div className="flex items-center gap-2 text-slate-700 font-bold uppercase text-xs tracking-wider">
+                            <Calendar size={18} />
+                            2. PARÂMETROS DA EXTRAÇÃO
+                        </div>
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                             <div>
                                 <label className="block text-sm font-medium text-slate-700 mb-1">Tipo de Nota</label>
                                 <select
                                     name="type"
+                                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-brand-500 outline-none"
                                     value={formData.type}
                                     onChange={handleChange}
-                                    className="w-full h-11 px-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none text-sm transition bg-white"
                                 >
-                                    <option value="emitidas">Notas Emitidas</option>
                                     <option value="recebidas">Notas Recebidas</option>
+                                    <option value="emitidas">Notas Emitidas</option>
                                 </select>
                             </div>
-
                             <div>
                                 <label className="block text-sm font-medium text-slate-700 mb-1">Período Rápido</label>
                                 <select
                                     name="period"
+                                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-brand-500 outline-none"
                                     value={formData.period}
                                     onChange={handleChange}
-                                    className="w-full h-11 px-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none text-sm transition bg-white"
                                 >
                                     <option value="atual">Mês Atual</option>
-                                    <option value="anterior">Mês Anterior</option>
-                                    <option value="custom">Data Personalizada</option>
+                                    <option value="retroativo">3 Meses Atrás</option>
+                                    <option value="ano">Ano Atual</option>
+                                    <option value="custom">Personalizado</option>
                                 </select>
                             </div>
-
                             <div>
                                 <label className="block text-sm font-medium text-slate-700 mb-1">Formato Desejado</label>
-                                <div className="flex items-center gap-2 h-11 overflow-hidden">
-                                    <label className="flex-1 flex items-center justify-center gap-1 text-sm bg-slate-50 h-full rounded-lg border border-slate-200 cursor-pointer hover:bg-slate-100 transition relative">
-                                        <input type="radio" name="format" value="xml" checked={formData.format === 'xml'} onChange={handleChange} className="peer sr-only" />
-                                        <div className="absolute inset-0 rounded-lg peer-checked:border-2 peer-checked:border-brand-500 peer-checked:bg-brand-50 transition pointer-events-none"></div>
-                                        <span className="relative z-10 font-medium peer-checked:text-brand-700 text-slate-600">XML</span>
-                                    </label>
-                                    <label className="flex-1 flex items-center justify-center gap-1 text-sm bg-slate-50 h-full rounded-lg border border-slate-200 cursor-pointer hover:bg-slate-100 transition relative">
-                                        <input type="radio" name="format" value="pdf" checked={formData.format === 'pdf'} onChange={handleChange} className="peer sr-only" />
-                                        <div className="absolute inset-0 rounded-lg peer-checked:border-2 peer-checked:border-brand-500 peer-checked:bg-brand-50 transition pointer-events-none"></div>
-                                        <span className="relative z-10 font-medium peer-checked:text-brand-700 text-slate-600">PDF</span>
-                                    </label>
+                                <div className="flex gap-2">
+                                    <button
+                                        type="button"
+                                        onClick={() => setFormData({ ...formData, format: 'xml' })}
+                                        className={`flex-1 py-2 text-sm font-bold rounded-lg border transition ${formData.format === 'xml' ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}
+                                    >
+                                        XML
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setFormData({ ...formData, format: 'pdf' })}
+                                        className={`flex-1 py-2 text-sm font-bold rounded-lg border transition ${formData.format === 'pdf' ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}
+                                    >
+                                        PDF
+                                    </button>
                                 </div>
                             </div>
                         </div>
 
                         {formData.period === 'custom' && (
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
+                            <div className="grid grid-cols-2 gap-4 p-4 bg-slate-50 rounded-lg animate-in fade-in slide-in-from-top-2">
                                 <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-1">Data Inicial</label>
-                                    <input type="date" name="startDate" value={formData.startDate} onChange={handleChange} className="w-full h-11 px-3 border border-slate-300 rounded-xl text-sm outline-none focus:ring-2 focus:ring-brand-500" required />
+                                    <label className="block text-xs font-bold text-slate-500 mb-1">DE</label>
+                                    <input
+                                        name="startDate"
+                                        type="date"
+                                        className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-brand-500"
+                                        value={formData.startDate}
+                                        onChange={handleChange}
+                                    />
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-1">Data Final</label>
-                                    <input type="date" name="endDate" value={formData.endDate} onChange={handleChange} className="w-full h-11 px-3 border border-slate-300 rounded-xl text-sm outline-none focus:ring-2 focus:ring-brand-500" required />
+                                    <label className="block text-xs font-bold text-slate-500 mb-1">ATÉ</label>
+                                    <input
+                                        name="endDate"
+                                        type="date"
+                                        className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-brand-500"
+                                        value={formData.endDate}
+                                        onChange={handleChange}
+                                    />
                                 </div>
                             </div>
                         )}
-                    </div>
+                    </section>
 
-                    {/* Botão Submit */}
-                    <div className="pt-6 border-t border-slate-100">
+                    <div className="pt-6">
                         <button
                             type="submit"
-                            disabled={loading || loadingFiles}
-                            className="w-full h-14 bg-slate-900 text-white rounded-xl hover:bg-slate-800 disabled:opacity-75 flex items-center justify-center gap-2 font-medium transition shadow-sm hover:shadow-md text-lg"
+                            disabled={loadingExtrair}
+                            className="w-full py-4 bg-slate-900 text-white font-bold rounded-xl hover:bg-slate-800 transition flex items-center justify-center gap-3 shadow-lg shadow-slate-200 disabled:opacity-70 disabled:cursor-not-allowed"
                         >
-                            {loading ? (
+                            {loadingExtrair ? (
                                 <>
                                     <Loader2 className="animate-spin" size={24} />
-                                    Extraindo e salvando notas...
+                                    Extraindo dados...
                                 </>
                             ) : (
                                 <>
@@ -274,6 +368,12 @@ export default function BuscarNota() {
                     </div>
                 </form>
             </div>
+
+            <AddCompanyModal
+                isOpen={isAddModalOpen}
+                onClose={() => setIsAddModalOpen(false)}
+                onSuccess={fetchCompanies}
+            />
         </div>
     );
 }
