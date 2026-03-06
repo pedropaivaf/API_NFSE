@@ -25,8 +25,9 @@ function validateCertificate(filename, password) {
 
     const cert = certBag.cert;
     const subject = cert.subject.attributes;
-    const cn = subject.find(a => a.shortName === 'CN')?.value || '';
-    const cnpjMatch = cn.match(/\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}|\d{14}/);
+    const rawCn = subject.find(a => a.shortName === 'CN')?.value || '';
+    const cn = rawCn.includes(':') ? rawCn.split(':')[0].trim() : rawCn;
+    const cnpjMatch = rawCn.match(/\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}|\d{14}/);
     const cnpj = cnpjMatch ? cnpjMatch[0] : null;
     const notBefore = cert.validity.notBefore;
     const notAfter = cert.validity.notAfter;

@@ -10,7 +10,7 @@ exports.createQuickCompany = async (req, res) => {
     try {
         const { data, error } = await supabase
             .from('companies')
-            .insert([{ name, cnpj, status: 'active' }])
+            .insert([{ name, cnpj }])
             .select()
             .single();
         if (error) throw error;
@@ -112,8 +112,7 @@ exports.createCompany = async (req, res) => {
                     name,
                     cnpj,
                     certificate_password: password, // In production, encrypt this!
-                    certificate_url: filePath,
-                    status: 'active'
+                    certificate_url: filePath
                 }
             ])
             .select()
