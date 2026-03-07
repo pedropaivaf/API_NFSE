@@ -1,5 +1,5 @@
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
 import { FileText, Search, Loader2, Download, AlertCircle, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 
@@ -46,34 +46,40 @@ export default function NfseList() {
         setSortConfig({ key, direction });
     };
 
-    const sortedNfs = [...nfs].sort((a, b) => {
-        if (!sortConfig.key) return 0;
+    // ⚡ Bolt: Memoize the sorted list to prevent expensive re-sorting on every render
+    const sortedNfs = useMemo(() => {
+        return [...nfs].sort((a, b) => {
+            if (!sortConfig.key) return 0;
 
-        let aValue = a[sortConfig.key];
-        let bValue = b[sortConfig.key];
+            let aValue = a[sortConfig.key];
+            let bValue = b[sortConfig.key];
 
-        if (sortConfig.key === 'amount') {
-            aValue = parseFloat(aValue);
-            bValue = parseFloat(bValue);
-        }
+            if (sortConfig.key === 'amount') {
+                aValue = parseFloat(aValue);
+                bValue = parseFloat(bValue);
+            }
 
-        if (aValue < bValue) {
-            return sortConfig.direction === 'asc' ? -1 : 1;
-        }
-        if (aValue > bValue) {
-            return sortConfig.direction === 'asc' ? 1 : -1;
-        }
-        return 0;
-    });
+            if (aValue < bValue) {
+                return sortConfig.direction === 'asc' ? -1 : 1;
+            }
+            if (aValue > bValue) {
+                return sortConfig.direction === 'asc' ? 1 : -1;
+            }
+            return 0;
+        });
+    }, [nfs, sortConfig]);
 
-    const filteredNfs = sortedNfs.filter(note => {
-        const term = searchTerm.toLowerCase();
-        const companyName = note.companies?.name?.toLowerCase() || '';
-        const accessKey = note.access_key?.toLowerCase() || '';
-        const status = note.status?.toLowerCase() || '';
+    // ⚡ Bolt: Memoize the filtered list to avoid re-filtering when unrelated state changes
+    const filteredNfs = useMemo(() => {
+        return sortedNfs.filter(note => {
+            const term = searchTerm.toLowerCase();
+            const companyName = note.companies?.name?.toLowerCase() || '';
+            const accessKey = note.access_key?.toLowerCase() || '';
+            const status = note.status?.toLowerCase() || '';
 
-        return companyName.includes(term) || accessKey.includes(term) || status.includes(term);
-    });
+            return companyName.includes(term) || accessKey.includes(term) || status.includes(term);
+        });
+    }, [sortedNfs, searchTerm]);
 
     return (
         <div className="space-y-6">
