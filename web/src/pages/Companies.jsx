@@ -1,5 +1,5 @@
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import axios from 'axios';
 import { Upload, Loader2, HardDrive, FileUp, Search } from 'lucide-react';
 

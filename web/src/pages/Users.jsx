@@ -64,7 +64,7 @@ export default function Users() {
             generateRandomKey();
             setFormData(prev => ({ ...prev, name: '' }));
             alert('Licença gerada com sucesso!');
-        } catch (err) {
+        } catch {
             alert("Erro ao criar chave.");
         } finally {
             setSubmitting(false);
@@ -76,7 +76,7 @@ export default function Users() {
         try {
             await axios.put(`${API_URL}/users/${id}/toggle-status`, { is_active: !currentStatus });
             loadUsers(); // Recarrega para mostrar o novo status
-        } catch (err) {
+        } catch {
             alert("Erro ao atualizar status do cliente.");
         }
     };
@@ -86,7 +86,7 @@ export default function Users() {
             try {
                 await axios.delete(`${API_URL}/users/${id}`);
                 loadUsers();
-            } catch (err) {
+            } catch {
                 alert("Erro ao revogar chave.");
             }
         }
