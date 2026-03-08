@@ -1,25 +1,15 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Key, ShieldCheck, Clock, CheckCircle, Ban, Code } from 'lucide-react';
 
 export default function Settings() {
-    const [license, setLicense] = useState({
-        name: '',
-        access_key: '',
-        plan_type: '',
-        expires_at: '',
-        is_active: true
-    });
-
-    // Carrega os dados salvos no momento do login
-    useEffect(() => {
-        setLicense({
-            name: localStorage.getItem('userName') || 'Usuário',
-            access_key: localStorage.getItem('userAccessKey') || 'Chave não encontrada',
-            plan_type: localStorage.getItem('userPlan') || 'ILIMITADO',
-            expires_at: localStorage.getItem('userExpiresAt') || '',
-            is_active: localStorage.getItem('userIsActive') !== 'false'
-        });
-    }, []);
+    // Inicializa o state já lendo os valores do localStorage (evita setState síncrono no useEffect)
+    const [license] = useState(() => ({
+        name: localStorage.getItem('userName') || 'Usuário',
+        access_key: localStorage.getItem('userAccessKey') || 'Chave não encontrada',
+        plan_type: localStorage.getItem('userPlan') || 'ILIMITADO',
+        expires_at: localStorage.getItem('userExpiresAt') || '',
+        is_active: localStorage.getItem('userIsActive') !== 'false'
+    }));
 
     // Função para calcular os dias restantes
     const calculateRemainingDays = (expiresAt) => {
