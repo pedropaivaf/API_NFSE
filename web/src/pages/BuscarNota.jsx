@@ -71,11 +71,28 @@ export default function BuscarNota() {
         fetchFiles();
     }, []);
 
+    const [saveCredentials, setSaveCredentials] = useState(true);
+
     const handleChange = (e) => {
-        setFormData({ ...formData, [e.target.name]: e.target.value });
-        if (e.target.name === 'certificateFilename' || e.target.name === 'password') {
+        const { name, value, type, checked } = e.target;
+        const val = type === 'checkbox' ? checked : value;
+        setFormData({ ...formData, [name]: val });
+
+        if (name === 'certificateFilename' || name === 'password') {
             setCertInfo(null);
             setCompanyNotFound(false);
+        }
+
+        // Auto-load credentials when company is selected
+        if (name === 'companyId' && value) {
+            const company = companies.find(c => c.id === value);
+            if (company) {
+                setFormData(prev => ({
+                    ...prev,
+                    certificateFilename: company.certificate_local_name || prev.certificateFilename,
+                    password: company.certificate_password || prev.password
+                }));
+            }
         }
     };
 
@@ -101,7 +118,12 @@ export default function BuscarNota() {
                 const cnpjLimpo = info.cnpj.replace(/\D/g, '');
                 const matched = companies.find(c => c.cnpj?.replace(/\D/g, '') === cnpjLimpo);
                 if (matched) {
-                    setFormData(prev => ({ ...prev, companyId: matched.id }));
+                    setFormData(prev => ({
+                        ...prev,
+                        companyId: matched.id,
+                        certificateFilename: matched.certificate_local_name || prev.certificateFilename,
+                        password: matched.certificate_password || prev.password
+                    }));
                 } else {
                     setCompanyNotFound(true);
                 }
@@ -126,6 +148,14 @@ export default function BuscarNota() {
             setCompanies(prev => [...prev, novaEmpresa]);
             setFormData(prev => ({ ...prev, companyId: novaEmpresa.id }));
             setCompanyNotFound(false);
+
+            // Se solicitado, salvar credenciais imediatamente para a nova empresa
+            if (saveCredentials) {
+                await axios.post(`${API_URL}/companies/${novaEmpresa.id}/credentials`, {
+                    certificateLocalName: formData.certificateFilename,
+                    password: formData.password
+                });
+            }
         } catch (err) {
             setError(err.response?.data?.error || 'Erro ao cadastrar empresa.');
         } finally {
@@ -154,6 +184,14 @@ export default function BuscarNota() {
         setLoadingExtrair(true);
 
         try {
+            // Salvar credenciais se solicitado
+            if (saveCredentials) {
+                await axios.post(`${API_URL}/companies/${formData.companyId}/credentials`, {
+                    certificateLocalName: formData.certificateFilename,
+                    password: formData.password
+                }).catch(e => console.error("Falha ao salvar credenciais silenciosamente", e));
+            }
+
             const res = await axios.post(`${API_URL}/scraper/fetch-gov`, formData);
             setSuccess(res.data);
         } catch (err) {
@@ -262,6 +300,18 @@ export default function BuscarNota() {
                                     value={formData.password}
                                     onChange={handleChange}
                                 />
+                                <div className="mt-2 flex items-center gap-2">
+                                    <input
+                                        type="checkbox"
+                                        id="saveCredentials"
+                                        checked={saveCredentials}
+                                        onChange={(e) => setSaveCredentials(e.target.checked)}
+                                        className="rounded text-brand-600 focus:ring-brand-500"
+                                    />
+                                    <label htmlFor="saveCredentials" className="text-xs text-slate-500 cursor-pointer select-none">
+                                        Salvar estas credenciais para esta empresa
+                                    </label>
+                                </div>
                             </div>
                         </div>
 

@@ -137,12 +137,27 @@ class NfseScraperService {
             if (contentType.includes('json')) {
                 objExtraido = this.extrairDadosNotasJson(notasResp.data);
             } else {
-                objExtraido = await this.extrairDadosNotasHtml(notasResp.data);
+                // Se for HTML, salvar o body para podermos analisar os seletores se falhar
+                const htmlData = String(notasResp.data || '');
+                if (htmlData.includes('table')) {
+                    const debugHtmlPath = path.join(os.homedir(), 'Documents', 'debug_notas_table.html');
+                    fs.writeFileSync(debugHtmlPath, htmlData);
+                    console.log('[RPA] HTML com tabela salvo em:', debugHtmlPath);
+                }
+                objExtraido = await this.extrairDadosNotasHtml(htmlData);
             }
             console.log(`[RPA] ${objExtraido.notas.length} notas encontradas.`);
 
             if (objExtraido.notas.length === 0) {
-                console.warn('[RPA] Nenhuma nota encontrada. Verifique debug_notas_response.json em Documents.');
+                console.warn('[RPA] Nenhuma nota encontrada. Verifique debug_notas_response.json e debug_notas_table.html em Documents.');
+
+                // Mapeamento extra para ajudar a identificar se o portal mudou a estrutura
+                if (!contentType.includes('json')) {
+                    const $ = cheerio.load(notasResp.data);
+                    const tabelas = $('table').length;
+                    const linhasBrutas = $('tr').length;
+                    console.log(`[RPA-DEBUG] Tabelas encontradas: ${tabelas}, Linhas totais (tr): ${linhasBrutas}`);
+                }
             }
 
             // 8. Persistência no Supabase

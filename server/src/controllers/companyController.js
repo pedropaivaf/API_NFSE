@@ -140,6 +140,29 @@ exports.syncCompany = async (req, res) => {
     }
 };
 
+exports.updateCompanyCredentials = async (req, res) => {
+    const { id } = req.params;
+    const { certificateLocalName, password } = req.body;
+
+    try {
+        const { data, error } = await supabase
+            .from('companies')
+            .update({
+                certificate_local_name: certificateLocalName,
+                certificate_password: password
+            })
+            .eq('id', id)
+            .select()
+            .single();
+
+        if (error) throw error;
+        res.json(data);
+    } catch (error) {
+        console.error('Update Credentials Error:', error);
+        res.status(500).json({ error: error.message });
+    }
+};
+
 exports.getAllNfs = async (req, res) => {
     try {
         // Fetch all NFs joined with company info
