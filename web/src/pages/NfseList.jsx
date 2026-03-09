@@ -111,13 +111,17 @@ export default function NfseList() {
                     <div className="col-span-3">Empresa</div>
                     <div className="col-span-3">Chave de Acesso</div>
                     <div className="col-span-2">Emissão</div>
-                    <div className="col-span-2 text-right cursor-pointer flex items-center justify-end gap-1 hover:text-brand-600" onClick={() => handleSort('amount')}>
+                    <button
+                        className="col-span-2 text-right cursor-pointer flex items-center justify-end gap-1 hover:text-brand-600 focus-visible:ring-2 focus-visible:ring-brand-500 rounded outline-none"
+                        onClick={() => handleSort('amount')}
+                        aria-label="Ordenar por valor"
+                    >
                         Valor (R$)
                         {sortConfig.key === 'amount' && (
-                            sortConfig.direction === 'asc' ? <ArrowUp size={14} /> : <ArrowDown size={14} />
+                            sortConfig.direction === 'asc' ? <ArrowUp size={14} aria-hidden="true" /> : <ArrowDown size={14} aria-hidden="true" />
                         )}
-                        {sortConfig.key !== 'amount' && <ArrowUpDown size={14} className="opacity-50" />}
-                    </div>
+                        {sortConfig.key !== 'amount' && <ArrowUpDown size={14} className="opacity-50" aria-hidden="true" />}
+                    </button>
                     <div className="col-span-1">Status</div>
                     <div className="col-span-1 text-right">Ações</div>
                 </div>
@@ -157,10 +161,11 @@ export default function NfseList() {
                                 <div className="col-span-1 text-right">
                                     <button
                                         onClick={() => handleDownloadXml(note.xml_url)}
-                                        className="text-brand-600 hover:text-brand-800 p-1 hover:bg-brand-50 rounded transition"
+                                        className="text-brand-600 hover:text-brand-800 p-1 hover:bg-brand-50 rounded transition focus-visible:ring-2 focus-visible:ring-brand-500 outline-none"
                                         title="Baixar XML"
+                                        aria-label="Baixar XML"
                                     >
-                                        <Download size={18} />
+                                        <Download size={18} aria-hidden="true" />
                                     </button>
                                 </div>
                             </div>
