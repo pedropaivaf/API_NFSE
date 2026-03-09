@@ -32,7 +32,13 @@ router.get('/:id/nfs', companyController.getNfs);
 // GET /companies/grouped-nfs - List Grouped NFS
 router.get('/grouped-nfs', nfsController.getGroupedNfs);
 
+// GET /companies/stats - Dashboard stats
+router.get('/stats', nfsController.getDashboardStats);
+
 // GET /companies/:id/download-zip - Download All XMLs as ZIP
 router.get('/:id/download-zip', nfsController.downloadZippedNfse);
+
+// DELETE /companies/:id/nfs - Reset all notes for a company
+router.delete('/:id/nfs', nfsController.resetCompanyNfs);
 
 module.exports = router;

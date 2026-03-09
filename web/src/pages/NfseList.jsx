@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import axios from 'axios';
 import {
     FileText, Search, Loader2, Download, AlertCircle, ChevronDown, ChevronRight,
-    Building2, Archive, ExternalLink, Calendar
+    Building2, Archive, ExternalLink, Calendar, Trash2
 } from 'lucide-react';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
@@ -45,6 +45,17 @@ export default function NfseList() {
     const handleDownloadZip = (companyId, companyName) => {
         const downloadUrl = `${API_URL}/companies/${companyId}/download-zip`;
         window.open(downloadUrl, '_blank');
+    };
+
+    const handleReset = async (companyId, companyName) => {
+        if (!window.confirm(`Resetar todas as notas de "${companyName}"?\nEsta ação não pode ser desfeita.`)) return;
+        try {
+            await axios.delete(`${API_URL}/companies/${companyId}/nfs`);
+            await fetchData();
+        } catch (err) {
+            console.error('Reset failed', err);
+            alert('Erro ao resetar notas: ' + (err.response?.data?.error || err.message));
+        }
     };
 
     const handleDownloadSingleXml = (xmlUrl) => {
@@ -122,13 +133,20 @@ export default function NfseList() {
                                     </div>
                                 </div>
                                 <div className="flex items-center gap-3">
-                                    <div onClick={(e) => e.stopPropagation()}>
+                                    <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
                                         <button
                                             onClick={() => handleDownloadZip(group.id, group.name)}
                                             className="flex items-center gap-2 px-3 py-1.5 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700 transition shadow-md shadow-blue-100"
                                         >
                                             <Download size={16} />
                                             Baixar Tudo (ZIP)
+                                        </button>
+                                        <button
+                                            onClick={() => handleReset(group.id, group.name)}
+                                            className="flex items-center gap-2 px-3 py-1.5 bg-red-600 text-white rounded-md text-sm font-medium hover:bg-red-700 transition shadow-md shadow-red-100"
+                                        >
+                                            <Trash2 size={16} />
+                                            Resetar
                                         </button>
                                     </div>
                                     <div className="w-px h-6 bg-slate-200 mx-1"></div>

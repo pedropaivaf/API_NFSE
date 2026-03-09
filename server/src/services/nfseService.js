@@ -2,6 +2,8 @@
 const axios = require('axios');
 const https = require('https');
 const zlib = require('zlib');
+const fs = require('fs');
+const path = require('path');
 const supabase = require('../config/supabaseClient');
 
 const URL_API_PRODUCAO = process.env.URL_API_PRODUCAO || 'https://adn.nfse.gov.br/contribuintes/DFe/0';
@@ -109,32 +111,28 @@ async function processNfse(item, company) {
         const xmlBuffer = zlib.gunzipSync(bufferBase64);
         const xmlString = xmlBuffer.toString('utf-8');
 
-        // 2. Upload XML to Storage
-        const storagePath = `xmls/${company.cnpj}/${chave}.xml`;
-        const { error: uploadError } = await supabase.storage
-            .from('xmls')
-            .upload(storagePath, xmlBuffer, {
-                contentType: 'text/xml',
-                upsert: true
-            });
+        // 2. Salvar XML em disco local (mesmo padrão do scraper)
+        const { data: dbSettings } = await supabase.from('app_settings').select('*');
+        const settingsMap = (dbSettings || []).reduce((acc, s) => { acc[s.key] = s.value; return acc; }, {});
+        const outputDir = settingsMap.output_path || path.join(process.env.USERPROFILE || process.env.HOME, 'Documents', 'notas_processadas');
+        const localDir = path.join(outputDir, 'recebidas');
+        fs.mkdirSync(localDir, { recursive: true });
+        fs.writeFileSync(path.join(localDir, `${chave}.xml`), xmlBuffer);
 
-        if (uploadError) console.error(`Failed to upload XML ${chave}:`, uploadError.message);
-
-        // 3. Extract basic metadata (Regex for simplicity, or use XML parser if needed)
-        // Simple regex to find content (This is fragile, ideally use xml2js)
+        // 3. Extract basic metadata
         const issueDateMatch = xmlString.match(/<DhEmi>(.*?)<\/DhEmi>/) || xmlString.match(/dhemi="(.*?)"/i);
         const issueDate = issueDateMatch ? issueDateMatch[1] : new Date();
 
         const amountMatch = xmlString.match(/<VlServicos>(.*?)<\/VlServicos>/);
         const amount = amountMatch ? parseFloat(amountMatch[1]) : 0;
 
-        // 4. Upsert into Database
+        // 4. Upsert into Database com caminho local (mesmo padrão do scraper)
         await supabase.from('nfs').upsert({
             company_id: company.id,
             access_key: chave,
             issue_date: issueDate,
             amount: amount,
-            xml_url: storagePath,
+            xml_url: `local_extract/recebidas/${chave}.xml`,
             status: 'processed'
         }, { onConflict: 'company_id, access_key' });
 

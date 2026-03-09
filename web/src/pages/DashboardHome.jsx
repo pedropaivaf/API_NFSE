@@ -1,50 +1,49 @@
-import { useState } from 'react';
-import { Building2, FileCheck, CircleDollarSign, Activity, TrendingUp, BarChart2, AlertOctagon } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import axios from 'axios';
+import { Building2, FileCheck, CircleDollarSign, Activity, TrendingUp } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Rectangle } from 'recharts';
 
-const dataWeek = [
-    { name: 'Seg', processadas: 40, erros: 2, valor: 4500 },
-    { name: 'Ter', processadas: 30, erros: 1, valor: 3200 },
-    { name: 'Qua', processadas: 20, erros: 3, valor: 2100 },
-    { name: 'Qui', processadas: 27, erros: 0, valor: 2800 },
-    { name: 'Sex', processadas: 18, erros: 1, valor: 1900 },
-    { name: 'Sáb', processadas: 23, erros: 2, valor: 2400 },
-    { name: 'Dom', processadas: 34, erros: 0, valor: 3600 },
-];
-
-const dataMonth = [
-    { name: 'Sem 1', processadas: 150, erros: 12, valor: 15000 },
-    { name: 'Sem 2', processadas: 180, erros: 8, valor: 18500 },
-    { name: 'Sem 3', processadas: 120, erros: 15, valor: 12000 },
-    { name: 'Sem 4', processadas: 200, erros: 5, valor: 21000 },
-];
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
 export default function DashboardHome() {
     const [period, setPeriod] = useState('week'); // 'week' | 'month'
     const [chartMode, setChartMode] = useState('volume'); // 'volume' | 'quality'
+    const [stats, setStats] = useState(null);
+    const [loading, setLoading] = useState(true);
 
-    const currentData = period === 'week' ? dataWeek : dataMonth;
+    useEffect(() => {
+        axios.get(`${API_URL}/companies/stats`)
+            .then(res => setStats(res.data))
+            .catch(err => console.error('Dashboard stats error:', err))
+            .finally(() => setLoading(false));
+    }, []);
+
+    const currentData = stats ? (period === 'week' ? stats.seriesWeek : stats.seriesMonth) : [];
+
+    const totalAmount = stats
+        ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(stats.totalAmount)
+        : 'R$ 0,00';
 
     return (
         <div className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                 <StatCard
                     title="Empresas Monitoradas"
-                    value="0"
+                    value={loading ? '...' : String(stats?.companies ?? 0)}
                     icon={<Building2 size={22} />}
                     trend="+0 novas"
                     trendUp={true}
                 />
                 <StatCard
                     title="Notas Processadas"
-                    value="0"
+                    value={loading ? '...' : String(stats?.totalNotes ?? 0)}
                     icon={<FileCheck size={22} />}
                     trend={period === 'week' ? "Últimos 7 dias" : "Este Mês"}
                     trendUp={true}
                 />
                 <StatCard
                     title="Valor Transacionado"
-                    value="R$ 0,00"
+                    value={loading ? '...' : totalAmount}
                     icon={<CircleDollarSign size={22} />}
                     trend="Acumulado"
                     trendUp={true}
@@ -110,10 +109,6 @@ export default function DashboardHome() {
                                         <stop offset="5%" stopColor="#0ea5e9" stopOpacity={0.3} />
                                         <stop offset="95%" stopColor="#0ea5e9" stopOpacity={0} />
                                     </linearGradient>
-                                    <linearGradient id="colorErros" x1="0" y1="0" x2="0" y2="1">
-                                        <stop offset="5%" stopColor="#ef4444" stopOpacity={0.3} />
-                                        <stop offset="95%" stopColor="#ef4444" stopOpacity={0} />
-                                    </linearGradient>
                                 </defs>
                                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
                                 <XAxis
@@ -139,19 +134,8 @@ export default function DashboardHome() {
                                     strokeWidth={3}
                                     fillOpacity={1}
                                     fill="url(#colorProcessadas)"
-                                    name="Sucesso"
+                                    name="Notas"
                                 />
-                                {chartMode === 'quality' && (
-                                    <Area
-                                        type="monotone"
-                                        dataKey="erros"
-                                        stroke="#ef4444"
-                                        strokeWidth={3}
-                                        fillOpacity={1}
-                                        fill="url(#colorErros)"
-                                        name="Erros"
-                                    />
-                                )}
                             </AreaChart>
                         </ResponsiveContainer>
                     </div>
@@ -179,12 +163,12 @@ export default function DashboardHome() {
                                     axisLine={false}
                                     tickLine={false}
                                     tick={{ fill: '#94a3b8', fontSize: 12 }}
-                                    tickFormatter={(value) => `k${value / 1000}`}
+                                    tickFormatter={(value) => `k${(value / 1000).toFixed(1)}`}
                                 />
                                 <Tooltip
                                     cursor={{ fill: '#f1f5f9' }}
                                     contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
-                                    formatter={(value) => [`R$ ${value}`, 'Receita']}
+                                    formatter={(value) => [new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value), 'Receita']}
                                 />
                                 <Bar
                                     dataKey="valor"
