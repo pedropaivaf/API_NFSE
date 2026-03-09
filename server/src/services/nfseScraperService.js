@@ -6,6 +6,7 @@ const fsPromises = require('fs').promises;
 const path = require('path');
 const os = require('os');
 const cheerio = require('cheerio');
+const forge = require('node-forge');
 const supabase = require('../config/supabaseClient');
 
 /**
@@ -36,10 +37,25 @@ class NfseScraperService {
             }
             const certBuffer = fs.readFileSync(fullPath);
 
-            // 2. Cliente Axios com mTLS
+            // 2. Extrair cert (PEM chain) e key (PEM) do pfx via node-forge
+            // Necessário porque https.Agent({ pfx }) não apresenta o cert ao servidor em alguns ambientes.
+            // Extração manual garante que toda a cadeia ICP-Brasil seja enviada no handshake mTLS.
+            const p12Asn1 = forge.asn1.fromDer(certBuffer.toString('binary'));
+            const p12 = forge.pkcs12.pkcs12FromAsn1(p12Asn1, false, password);
+
+            const certBags = p12.getBags({ bagType: forge.pki.oids.certBag })[forge.pki.oids.certBag] || [];
+            const certPem = certBags.map(bag => forge.pki.certificateToPem(bag.cert)).join('\n');
+
+            const keyBags = p12.getBags({ bagType: forge.pki.oids.pkcs8ShroudedKeyBag })[forge.pki.oids.pkcs8ShroudedKeyBag] || [];
+            const keyPem = keyBags.length > 0 ? forge.pki.privateKeyToPem(keyBags[0].key) : null;
+            if (!keyPem) throw new Error('Chave privada não encontrada no certificado .pfx');
+
+            console.log(`[RPA] Certificado extraído: ${certBags.length} cert(s) na cadeia`);
+
+            // 3. Cliente Axios com mTLS — cert+key como PEM (mais compatível que pfx direto)
             const httpsAgent = new https.Agent({
-                pfx: certBuffer,
-                passphrase: password,
+                cert: certPem,
+                key: keyPem,
                 rejectUnauthorized: false, // portal gov.br usa ICP-Brasil — fora do bundle CA do Node.js
             });
             const apiClient = axios.create({
@@ -55,14 +71,22 @@ class NfseScraperService {
                 },
             });
 
-            // 3. Autenticação mTLS: GET /Certificado → 302 → Dashboard
+            // 4. Autenticação mTLS: GET /Certificado → 302 → Dashboard
             console.log('[RPA] Autenticando via mTLS em /Certificado...');
             const authResp = await apiClient.get(`${BASE_URL}/Certificado`, {
                 headers: { 'Referer': `${BASE_URL}/Login?ReturnUrl=%2fEmissorNacional` },
             });
             const finalUrl = authResp.request?.res?.responseUrl || authResp.config?.url || '';
-            if (!finalUrl.toLowerCase().includes('dashboard')) {
-                throw new Error(`Autenticação mTLS falhou. URL final inesperada: ${finalUrl}`);
+            console.log('[RPA] URL final após auth:', finalUrl);
+
+            // Verificar que chegamos no Dashboard — a pathname deve terminar com /Dashboard
+            // NÃO usar includes('dashboard') pois a login page tem ReturnUrl=.../Dashboard na query string
+            let finalPathname = '';
+            try { finalPathname = new URL(finalUrl).pathname.toLowerCase(); } catch (_) { finalPathname = finalUrl.toLowerCase(); }
+            if (!finalPathname.endsWith('/dashboard')) {
+                const debugLoginPath = path.join(os.homedir(), 'Documents', 'debug_auth_redirect.html');
+                fs.writeFileSync(debugLoginPath, String(authResp.data || ''));
+                throw new Error(`Autenticação mTLS falhou — servidor retornou página de login em vez do Dashboard. Verifique debug_auth_redirect.html em Documents. URL: ${finalUrl}`);
             }
             console.log('[RPA] Autenticado com sucesso. URL:', finalUrl);
 
