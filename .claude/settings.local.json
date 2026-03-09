@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install node-forge --save)",
+      "Bash(node -e \":*)",
+      "Bash(npm run electron:build)"
+    ]
+  }
+}

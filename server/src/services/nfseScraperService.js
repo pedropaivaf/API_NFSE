@@ -1,13 +1,14 @@
-'use strict';
 const axios = require('axios');
 const https = require('https');
-const tls = require('tls');
+const crypto = require('crypto');
 const fs = require('fs');
 const fsPromises = require('fs').promises;
 const path = require('path');
 const os = require('os');
 const cheerio = require('cheerio');
 const forge = require('node-forge');
+const { HttpsCookieAgent } = require('http-cookie-agent/http');
+const { CookieJar } = require('tough-cookie');
 const supabase = require('../config/supabaseClient');
 
 /**
@@ -38,61 +39,23 @@ class NfseScraperService {
             }
             const certBuffer = fs.readFileSync(fullPath);
 
-            // 2. Extrair cert (PEM chain) e key (PEM) do pfx via node-forge
-            // Necessário porque https.Agent({ pfx }) não apresenta o cert ao servidor em alguns ambientes.
-            // Extração manual garante que toda a cadeia ICP-Brasil seja enviada no handshake mTLS.
-            const p12Asn1 = forge.asn1.fromDer(certBuffer.toString('binary'));
-            const p12 = forge.pkcs12.pkcs12FromAsn1(p12Asn1, false, password);
-
-            // Extrair todos os certBags e ordenar: leaf cert (com chave privada) primeiro
-            const certBagsAll = p12.getBags({ bagType: forge.pki.oids.certBag })[forge.pki.oids.certBag] || [];
-
-            // Extrair chave privada — tenta pkcs8ShroudedKeyBag primeiro, depois keyBag
-            let keyBags = p12.getBags({ bagType: forge.pki.oids.pkcs8ShroudedKeyBag })[forge.pki.oids.pkcs8ShroudedKeyBag] || [];
-            if (keyBags.length === 0) {
-                keyBags = p12.getBags({ bagType: forge.pki.oids.keyBag })[forge.pki.oids.keyBag] || [];
-            }
-            const keyPem = keyBags.length > 0 ? forge.pki.privateKeyToPem(keyBags[0].key) : null;
-            if (!keyPem) throw new Error('Chave privada não encontrada no certificado .pfx');
-
-            // Ordenar certs: leaf (que corresponde à chave privada) primeiro, depois intermediários
-            const leafKey = keyBags[0].key;
-            const sortedCerts = [...certBagsAll].sort((a, b) => {
-                try {
-                    const aIsLeaf = forge.pki.publicKeyToPem(a.cert.publicKey) === forge.pki.publicKeyToPem(leafKey.publicKey || forge.pki.rsa.setPublicKey(leafKey.n, leafKey.e));
-                    return aIsLeaf ? -1 : 1;
-                } catch (_) { return 0; }
-            });
-            const certPem = sortedCerts.map(bag => forge.pki.certificateToPem(bag.cert)).join('\n');
-
-            // Log da cadeia para diagnóstico
-            console.log(`[RPA] Certificado extraído: ${certBagsAll.length} cert(s) na cadeia`);
-            sortedCerts.forEach((bag, i) => {
-                const subj = bag.cert.subject.getField('CN')?.value || bag.cert.subject.getField('O')?.value || '?';
-                console.log(`[RPA]   [${i}] ${subj}`);
-            });
-
-            // Validar que Node.js TLS consegue carregar o par cert+key antes de usar
-            try {
-                tls.createSecureContext({ cert: certPem, key: keyPem });
-                console.log('[RPA] TLS context validado com sucesso');
-            } catch (tlsErr) {
-                console.error('[RPA] Falha ao criar TLS context:', tlsErr.message);
-                throw new Error('Certificado ou chave inválidos para TLS: ' + tlsErr.message);
-            }
-
-            // 3. Cliente Axios com mTLS
-            // maxVersion: TLSv1.2 — IIS 10.0 tem problemas com client cert auth em TLS 1.3
-            const httpsAgent = new https.Agent({
-                cert: certPem,
-                key: keyPem,
+            // 2. Configurar Cookie Jar e mTLS Agent
+            // Usamos HttpsCookieAgent para garantir que cookies de afinidade (ARR) sejam mantidos durante os redirects
+            const jar = new CookieJar();
+            const httpsAgent = new HttpsCookieAgent({
+                pfx: certBuffer,
+                passphrase: password,
                 rejectUnauthorized: false, // portal gov.br usa ICP-Brasil — fora do bundle CA do Node.js
-                maxVersion: 'TLSv1.2',    // força TLS 1.2 para garantir CertificateRequest no handshake
+                maxVersion: 'TLSv1.2',    // força TLS 1.2 para garantir CertificateRequest no handshake IIS
+                secureOptions: crypto.constants.SSL_OP_LEGACY_SERVER_CONNECT, // melhor compatibilidade IIS
+                cookies: { jar }
             });
+
+            // 3. Cliente Axios com Cookie Support
             const apiClient = axios.create({
                 httpsAgent,
                 timeout: 30000,
-                maxRedirects: 5,
+                maxRedirects: 10,
                 headers: {
                     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36',
                     'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
@@ -107,6 +70,7 @@ class NfseScraperService {
             const authResp = await apiClient.get(`${BASE_URL}/Certificado`, {
                 headers: { 'Referer': `${BASE_URL}/Login?ReturnUrl=%2fEmissorNacional` },
             });
+
             const finalUrl = authResp.request?.res?.responseUrl || authResp.config?.url || '';
             console.log('[RPA] URL final após auth:', finalUrl);
 
@@ -114,6 +78,7 @@ class NfseScraperService {
             // NÃO usar includes('dashboard') pois a login page tem ReturnUrl=.../Dashboard na query string
             let finalPathname = '';
             try { finalPathname = new URL(finalUrl).pathname.toLowerCase(); } catch (_) { finalPathname = finalUrl.toLowerCase(); }
+
             if (!finalPathname.endsWith('/dashboard')) {
                 const debugLoginPath = path.join(os.homedir(), 'Documents', 'debug_auth_redirect.html');
                 fs.writeFileSync(debugLoginPath, String(authResp.data || ''));
@@ -121,7 +86,7 @@ class NfseScraperService {
             }
             console.log('[RPA] Autenticado com sucesso. URL:', finalUrl);
 
-            // 4. Extrair accessToken e UrlRest do HTML do Dashboard
+            // 5. Extrair accessToken e UrlRest do HTML do Dashboard
             // O Dashboard injeta: window.sessionStorage.setItem("accessToken", '...') e window.UrlRest = "..."
             const dashHtml = authResp.data || '';
             const urlRestMatch = dashHtml.match(/window\.UrlRest\s*=\s*["']([^"']+)["']/);
