@@ -10,6 +10,7 @@ const forge = require('node-forge');
 const { HttpsCookieAgent } = require('http-cookie-agent/http');
 const { CookieJar } = require('tough-cookie');
 const supabase = require('../config/supabaseClient');
+const { log } = require('../utils/logger');
 
 /**
  * SERVIÇO DE EXTRAÇÃO mTLS REAL — Portal NFSe Nacional (nfse.gov.br)
@@ -25,95 +26,231 @@ const BASE_URL = 'https://www.nfse.gov.br/EmissorNacional';
 
 class NfseScraperService {
 
-    async runExtractionJob(config) {
-        const { companyId, certificateFilename, password, type, period, format, startDate, endDate } = config;
+    async validateLogin(config) {
+        const { method = 'pfx', certificateFilename, password, loginCnpj, loginPassword } = config;
+        const settings = await this._getSettings();
+        const jar = new CookieJar();
+        let apiClient;
+
+        if (method === 'pfx') {
+            apiClient = await this._createMtlsClient(certificateFilename, password, settings.certificates_path, jar);
+            console.log('[RPA-VAL] Validando via A1...');
+            const authResp = await apiClient.get(`${BASE_URL}/Certificado`, {
+                headers: { 'Referer': `${BASE_URL}/Login` },
+            });
+            await this._verifyAuthSuccess(authResp);
+            const authData = this._extractAuthData(authResp.data);
+
+            // Extrair CN do certificado para identificar a empresa
+            const fullPath = path.join(settings.certificates_path || path.join(os.homedir(), 'Documents', 'Certificados'), certificateFilename);
+            const pfxBuffer = fs.readFileSync(fullPath);
+            const p12Asn1 = forge.asn1.fromDer(pfxBuffer.toString('binary'));
+            const p12 = forge.pkcs12.pkcs12FromAsn1(p12Asn1, password);
+            const bags = p12.getBags({ bagType: forge.pki.oids.certBag });
+            const cert = bags[forge.pki.oids.certBag][0].cert;
+            const subject = cert.subject.attributes.reduce((acc, attr) => {
+                acc[attr.shortName || attr.name] = attr.value;
+                return acc;
+            }, {});
+
+            return {
+                valid: true,
+                cn: subject.CN || 'Empresa Identificada',
+                cnpj: subject.CN?.match(/\d{14}/)?.[0] || null,
+                notAfter: cert.validity.notAfter
+            };
+
+        } else {
+            apiClient = this._createStandardClient(jar);
+            console.log('[RPA-VAL] Validando via Senha...');
+            const authResp = await this._performPasswordLogin(apiClient, loginCnpj, loginPassword);
+            await this._verifyAuthSuccess(authResp);
+
+            // No Caso de senha, o Dashboard HTML pode não ter o CNPJ explicitamente fácil.
+            // Mas vamos tentar extrair o que der ou retornar sucesso genérico.
+            const { accessToken } = this._extractAuthData(authResp.data);
+
+            return {
+                valid: true,
+                cn: loginCnpj,
+                cnpj: loginCnpj.replace(/\D/g, ''),
+                notAfter: null
+            };
+        }
+    }
+
+    async runExtractionJob(config, outputDirBase = null) {
+        log(`[RPA] Iniciando trabalho para: ${config.companyId} | Método: ${config.method || 'pfx'}`);
+
+        const { method = 'pfx', certificateFilename, password, loginCnpj, loginPassword } = config;
+        const settings = await this._getSettings();
+        const jar = new CookieJar();
+        let apiClient;
 
         try {
-            console.log(`[RPA] Iniciando Extração - EmpresaID: ${companyId} - Tipo: ${type}`);
-
-            // 1. Carregar certificado do disco
-            const certDir = process.env.LOCAL_CERT_PATH || path.join(os.homedir(), 'Documents', 'Certificados');
-            const fullPath = path.join(certDir, certificateFilename);
-            if (!fs.existsSync(fullPath)) {
-                throw new Error(`Certificado não encontrado: ${fullPath}`);
+            if (method === 'pfx') {
+                apiClient = await this._createMtlsClient(certificateFilename, password, settings.certificates_path, jar);
+                const authResp = await apiClient.get(`${BASE_URL}/Certificado`, {
+                    headers: { 'Referer': `${BASE_URL}/Login` },
+                });
+                await this._verifyAuthSuccess(authResp);
+                const authData = this._extractAuthData(authResp.data);
+                return await this._continueExtraction(apiClient, authData, config, outputDirBase);
+            } else {
+                apiClient = this._createStandardClient(jar);
+                const authResp = await this._performPasswordLogin(apiClient, loginCnpj, loginPassword);
+                await this._verifyAuthSuccess(authResp);
+                const authData = this._extractAuthData(authResp.data);
+                return await this._continueExtraction(apiClient, authData, config, outputDirBase);
             }
-            const certBuffer = fs.readFileSync(fullPath);
-
-            // 2. Configurar Cookie Jar e mTLS Agent
-            // Usamos HttpsCookieAgent para garantir que cookies de afinidade (ARR) sejam mantidos durante os redirects
-            const jar = new CookieJar();
-            const httpsAgent = new HttpsCookieAgent({
-                pfx: certBuffer,
-                passphrase: password,
-                rejectUnauthorized: false, // portal gov.br usa ICP-Brasil — fora do bundle CA do Node.js
-                maxVersion: 'TLSv1.2',    // força TLS 1.2 para garantir CertificateRequest no handshake IIS
-                secureOptions: crypto.constants.SSL_OP_LEGACY_SERVER_CONNECT, // melhor compatibilidade IIS
-                cookies: { jar }
-            });
-
-            // 3. Cliente Axios com Cookie Support
-            const apiClient = axios.create({
-                httpsAgent,
-                timeout: 30000,
-                maxRedirects: 10,
-                headers: {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36',
-                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-                    'Accept-Language': 'pt-BR,pt;q=0.9',
-                    'Cache-Control': 'no-cache',
-                    'Pragma': 'no-cache',
-                },
-            });
-
-            // 4. Autenticação mTLS: GET /Certificado → 302 → Dashboard
-            console.log('[RPA] Autenticando via mTLS em /Certificado...');
-            const authResp = await apiClient.get(`${BASE_URL}/Certificado`, {
-                headers: { 'Referer': `${BASE_URL}/Login?ReturnUrl=%2fEmissorNacional` },
-            });
-
-            const finalUrl = authResp.request?.res?.responseUrl || authResp.config?.url || '';
-            console.log('[RPA] URL final após auth:', finalUrl);
-
-            // Verificar que chegamos no Dashboard — a pathname deve terminar com /Dashboard
-            // NÃO usar includes('dashboard') pois a login page tem ReturnUrl=.../Dashboard na query string
-            let finalPathname = '';
-            try { finalPathname = new URL(finalUrl).pathname.toLowerCase(); } catch (_) { finalPathname = finalUrl.toLowerCase(); }
-
-            if (!finalPathname.endsWith('/dashboard')) {
-                const debugLoginPath = path.join(os.homedir(), 'Documents', 'debug_auth_redirect.html');
-                fs.writeFileSync(debugLoginPath, String(authResp.data || ''));
-                throw new Error(`Autenticação mTLS falhou — servidor retornou página de login em vez do Dashboard. Verifique debug_auth_redirect.html em Documents. URL: ${finalUrl}`);
+        } catch (error) {
+            console.error('[RPA-ERROR]', error.message);
+            if (error.code === 'ERR_OSSL_PKCS12_MAC_VERIFY_FAILURE') {
+                throw new Error('Senha do certificado A1 incorreta ou arquivo corrompido.');
             }
-            console.log('[RPA] Autenticado com sucesso. URL:', finalUrl);
-
-            // 5. Extrair accessToken e UrlRest do HTML do Dashboard
-            // O Dashboard injeta: window.sessionStorage.setItem("accessToken", '...') e window.UrlRest = "..."
-            const dashHtml = authResp.data || '';
-            const urlRestMatch = dashHtml.match(/window\.UrlRest\s*=\s*["']([^"']+)["']/);
-            const tokenMatch = dashHtml.match(/window\.sessionStorage\.setItem\(\s*["']accessToken["']\s*,\s*["']([^"']+)["']\s*\)/);
-            const urlRest = urlRestMatch?.[1] || null;
-            const accessToken = tokenMatch?.[1] || null;
-
-            console.log('[RPA] UrlRest:', urlRest || 'NÃO ENCONTRADO');
-            console.log('[RPA] AccessToken:', accessToken ? accessToken.substring(0, 50) + '...' : 'NÃO ENCONTRADO');
-
-            if (!accessToken) {
-                const debugPath = path.join(os.homedir(), 'Documents', 'debug_dashboard.html');
-                fs.writeFileSync(debugPath, dashHtml);
-                throw new Error(`Token JWT não encontrado no Dashboard. Dashboard salvo em: ${debugPath}`);
+            if (error.response) {
+                const debugPath = path.join(os.homedir(), 'Documents', 'debug_gov_response.html');
+                fs.writeFileSync(debugPath, String(error.response.data || ''));
+                console.error('[RPA-DEBUG] Resposta do governo salva em:', debugPath);
+                if (error.response.status === 401 || error.response.status === 403) {
+                    throw new Error('Gov.br negou acesso. Verifique suas credenciais.');
+                }
+                throw new Error(`Portal gov.br retornou status ${error.response.status}. Veja Documents/debug_gov_response.html para detalhes.`);
             }
+            throw error;
+        }
+    }
 
+    async _getSettings() {
+        const { data: dbSettings } = await supabase.from('app_settings').select('*');
+        return (dbSettings || []).reduce((acc, curr) => {
+            acc[curr.key] = curr.value;
+            return acc;
+        }, {});
+    }
+
+    async _createMtlsClient(certificateFilename, password, certDir, jar) {
+        const fullPath = path.join(certDir || path.join(os.homedir(), 'Documents', 'Certificados'), certificateFilename);
+        if (!fs.existsSync(fullPath)) {
+            throw new Error(`Certificado não encontrado: ${fullPath}`);
+        }
+
+        const pfxBuffer = fs.readFileSync(fullPath);
+        const httpsAgent = new HttpsCookieAgent({
+            pfx: pfxBuffer,
+            passphrase: password,
+            rejectUnauthorized: false, // O portal as vezes tem problemas de cadeia
+            cookies: { jar }
+        });
+
+        return axios.create({
+            httpsAgent,
+            timeout: 30000,
+            maxRedirects: 10,
+            headers: this._getCommonHeaders(),
+        });
+    }
+
+    _createStandardClient(jar) {
+        const httpsAgent = new HttpsCookieAgent({
+            rejectUnauthorized: false,
+            cookies: { jar }
+        });
+
+        return axios.create({
+            httpsAgent,
+            timeout: 30000,
+            maxRedirects: 10,
+            headers: this._getCommonHeaders(),
+        });
+    }
+
+    _getCommonHeaders() {
+        return {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            'Accept-Language': 'pt-BR,pt;q=0.9',
+            'Cache-Control': 'no-cache',
+            'Pragma': 'no-cache',
+        };
+    }
+
+    async _performPasswordLogin(apiClient, login, password) {
+        const loginPage = await apiClient.get(`${BASE_URL}/Login`);
+        const $ = cheerio.load(loginPage.data);
+        const rvToken = $('input[name="__RequestVerificationToken"]').val();
+
+        if (!rvToken) {
+            console.warn('[RPA-LOGIN] CSRF Token não encontrado na página de login.');
+        }
+
+        const params = new URLSearchParams();
+        params.append('CPFCNPJ', login);
+        params.append('Senha', password);
+        if (rvToken) params.append('__RequestVerificationToken', rvToken);
+        params.append('ReturnUrl', '/EmissorNacional');
+
+        return apiClient.post(`${BASE_URL}/Login`, params.toString(), {
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'Referer': `${BASE_URL}/Login`,
+            }
+        });
+    }
+
+    async _verifyAuthSuccess(authResp) {
+        const finalUrl = authResp.request?.res?.responseUrl || authResp.config?.url || '';
+        let finalPathname = '';
+        try { finalPathname = new URL(finalUrl).pathname.toLowerCase(); } catch (_) { finalPathname = finalUrl.toLowerCase(); }
+
+        if (!finalPathname.endsWith('/dashboard')) {
+            const debugLoginPath = path.join(os.homedir(), 'Documents', 'debug_auth_redirect.html');
+            fs.writeFileSync(debugLoginPath, String(authResp.data || ''));
+            throw new Error(`Autenticação falhou — verifique se usuário/senha estão corretos. Detalhes em Documents/debug_auth_redirect.html.`);
+        }
+        console.log('[RPA] Autenticado com sucesso no Dashboard.');
+        return true;
+    }
+
+    _extractAuthData(dashHtml) {
+        const urlRestMatch = dashHtml.match(/window\.UrlRest\s*=\s*["']([^"']+)["']/);
+        const tokenMatch = dashHtml.match(/window\.sessionStorage\.setItem\(\s*["']accessToken["']\s*,\s*["']([^"']+)["']\s*\)/);
+        const urlRest = urlRestMatch?.[1] || null;
+        const accessToken = tokenMatch?.[1] || null;
+
+        if (!accessToken) {
+            const debugPath = path.join(os.homedir(), 'Documents', 'debug_dashboard.html');
+            fs.writeFileSync(debugPath, dashHtml);
+            throw new Error(`Token JWT não encontrado no Dashboard. Detalhes em Documents/debug_dashboard.html`);
+        }
+
+        return { urlRest, accessToken };
+    }
+
+    async _continueExtraction(apiClient, authData, config, outputDirBase) {
+        const { accessToken } = authData;
+        const { companyId, type, period, format, startDate, endDate } = config;
+        const outputDir = outputDirBase || path.join(os.homedir(), 'Documents', 'notas_processadas');
+
+        try {
             // 5. Calcular período de datas
             const { dataInicio, dataFim } = this._calcularPeriodo(period, startDate, endDate);
-            console.log(`[RPA] Período: ${dataInicio} → ${dataFim}`);
+            log(`[RPA] Período solicitado: ${dataInicio} → ${dataFim}`);
 
-            // 6. Buscar notas — URL correta: /Notas/Recebidas ou /Notas/Emitidas (plural, sem "Index")
+            // 6. Buscar notas
             const notasTipo = type === 'emitidas' ? 'Emitidas' : 'Recebidas';
             const notasUrl = `${BASE_URL}/Notas/${notasTipo}`;
-            console.log(`[RPA] Consultando: ${notasUrl}`);
+
+            const params = {
+                dataInicio,
+                dataFim,
+                datainicio: dataInicio,
+                datafim: dataFim,
+                executar: '1'
+            };
 
             const notasResp = await apiClient.get(notasUrl, {
-                params: { dataInicio, dataFim },
+                params,
                 headers: {
                     'Authorization': `Bearer ${accessToken}`,
                     'Referer': `${BASE_URL}/Dashboard`,
@@ -121,92 +258,75 @@ class NfseScraperService {
             });
 
             const contentType = notasResp.headers?.['content-type'] || '';
-            console.log('[RPA] Resposta recebida. Content-Type:', contentType, '| Tamanho:', String(notasResp.data || '').length, 'chars');
 
-            // Salvar resposta para diagnóstico (remover quando seletores confirmados)
-            const debugNotasPath = path.join(os.homedir(), 'Documents', 'debug_notas_response.json');
-            fs.writeFileSync(debugNotasPath, JSON.stringify({
-                status: notasResp.status,
-                contentType,
-                data: notasResp.data,
-            }, null, 2));
-            console.log('[RPA] Resposta de notas salva em:', debugNotasPath);
-
-            // 7. Parse da resposta — JSON (REST API SERPRO) ou HTML (Cheerio)
             let objExtraido;
             if (contentType.includes('json')) {
                 objExtraido = this.extrairDadosNotasJson(notasResp.data);
             } else {
-                // Se for HTML, salvar o body para podermos analisar os seletores se falhar
                 const htmlData = String(notasResp.data || '');
-                if (htmlData.includes('table')) {
-                    const debugHtmlPath = path.join(os.homedir(), 'Documents', 'debug_notas_table.html');
-                    fs.writeFileSync(debugHtmlPath, htmlData);
-                    console.log('[RPA] HTML com tabela salvo em:', debugHtmlPath);
+                if (htmlData.includes('não deve ser superior a 30 dias')) {
+                    log('[RPA-LIMIT] O portal recusou o período por ser superior a 30 dias.', 'warn');
                 }
                 objExtraido = await this.extrairDadosNotasHtml(htmlData);
             }
-            console.log(`[RPA] ${objExtraido.notas.length} notas encontradas.`);
 
-            if (objExtraido.notas.length === 0) {
-                console.warn('[RPA] Nenhuma nota encontrada. Verifique debug_notas_response.json e debug_notas_table.html em Documents.');
+            log(`[RPA] ${objExtraido.notas.length} notas encontradas.`);
 
-                // Mapeamento extra para ajudar a identificar se o portal mudou a estrutura
-                if (!contentType.includes('json')) {
-                    const $ = cheerio.load(notasResp.data);
-                    const tabelas = $('table').length;
-                    const linhasBrutas = $('tr').length;
-                    console.log(`[RPA-DEBUG] Tabelas encontradas: ${tabelas}, Linhas totais (tr): ${linhasBrutas}`);
-                }
-            }
-
-            // 8. Persistência no Supabase
-            // 8. Salvar no Banco (Supabase)
+            // 8. Salvar no Banco (Supabase) com Prevenção de Duplicatas
             let savedCount = 0;
-            console.log(`[RPA-DB] Tentando salvar ${objExtraido.notas.length} notas...`);
-
             for (const nota of objExtraido.notas) {
-                // Parsing de Valor: Remove pontos de milhar e substitui vírgula por ponto
-                const valorStr = String(nota.valorServico || '0').trim();
-                const valorLimpo = parseFloat(valorStr.replace(/\./g, '').replace(',', '.'));
+                try {
+                    if (nota.chaveTabela) {
+                        const { data: existing } = await supabase
+                            .from('nfs')
+                            .select('access_key')
+                            .eq('company_id', companyId)
+                            .eq('access_key', nota.chaveTabela)
+                            .maybeSingle();
 
-                // Parsing de Data: Formato esperado "DD/MM/YYYY HH:MM" ou similar
-                const dataStr = String(nota.dataGeracao || '').trim();
-                let isoDate = null;
-
-                if (dataStr) {
-                    const [datePart, timePart] = dataStr.split(/\s+/);
-                    const parts = (datePart || '').split('/');
-                    if (parts.length === 3) {
-                        isoDate = `${parts[2]}-${parts[1]}-${parts[0]}T${timePart || '00:00'}:00Z`;
+                        if (existing) {
+                            log(`[RPA-DB] Nota ${nota.chaveTabela.substring(0, 10)}... já existe. Pulando.`);
+                            continue;
+                        }
                     }
-                }
 
-                if (!isoDate) {
-                    isoDate = new Date().toISOString();
-                }
+                    const valorStr = String(nota.valorServico || '0').trim();
+                    const valorLimpo = parseFloat(valorStr.replace(/R\$\s*/g, '').replace(/\./g, '').replace(',', '.'));
 
-                // UPSERT: CRITICAL - onConflict deve ser 'col1,col2' SEM ESPAÇO para o PostgREST
-                const { error: upsertError } = await supabase
-                    .from('nfs')
-                    .upsert({
+                    const dataStr = String(nota.dataGeracao || '').trim();
+                    let isoDate = null;
+                    if (dataStr) {
+                        const [datePart, timePart] = dataStr.split(/\s+/);
+                        const parts = (datePart || '').split('/');
+                        if (parts.length === 3) {
+                            let ano = parts[2];
+                            if (ano.length === 2) ano = `20${ano}`;
+                            isoDate = `${ano}-${parts[1]}-${parts[0]}T${timePart || '00:00'}:00Z`;
+                        }
+                    }
+                    if (!isoDate) isoDate = new Date().toISOString();
+
+                    const insertData = {
                         company_id: companyId,
                         access_key: nota.chaveTabela,
                         issue_date: isoDate,
                         amount: isNaN(valorLimpo) ? 0 : valorLimpo,
                         status: 'processed',
                         xml_url: `local_extract/${type}/${nota.chaveTabela}.xml`,
-                    }, { onConflict: 'company_id,access_key' });
+                    };
 
-                if (upsertError) {
-                    console.error(`[RPA-DB] Erro ao salvar ${nota.chaveTabela}:`, upsertError.message, upsertError.details || '');
-                } else {
-                    savedCount++;
+                    const { error: upsertError } = await supabase
+                        .from('nfs')
+                        .upsert(insertData, { onConflict: 'company_id,access_key' });
+
+                    if (!upsertError) savedCount++;
+                } catch (e) {
+                    log(`[RPA-DB] Falha crítica na nota ${nota.chaveTabela}: ${e.message}`, 'error');
                 }
             }
 
             // 9. Downloads para disco
-            const pastaDestino = path.join(os.homedir(), 'Documents', 'notas_processadas', type);
+            const pastaDestino = path.join(outputDir, type);
             await this.processarDownloadsNotas(apiClient, objExtraido.notas, pastaDestino, (format || 'xml').toLowerCase(), accessToken);
 
             return {
@@ -218,23 +338,10 @@ class NfseScraperService {
 
         } catch (error) {
             console.error('[RPA-ERROR]', error.message);
-            if (error.code === 'ERR_OSSL_PKCS12_MAC_VERIFY_FAILURE') {
-                throw new Error('Senha do certificado A1 incorreta ou arquivo corrompido.');
-            }
-            if (error.response) {
-                const debugPath = path.join(os.homedir(), 'Documents', 'debug_gov_response.html');
-                fs.writeFileSync(debugPath, String(error.response.data || ''));
-                console.error('[RPA-DEBUG] Resposta do governo salva em:', debugPath);
-                if (error.response.status === 401 || error.response.status === 403) {
-                    throw new Error('Gov.br negou acesso. Certificado pode estar revogado ou vencido.');
-                }
-                throw new Error(`Portal gov.br retornou status ${error.response.status}. Veja Documents/debug_gov_response.html para detalhes.`);
-            }
             throw error;
         }
     }
 
-    // Parse de resposta JSON da REST API SERPRO
     extrairDadosNotasJson(data) {
         const lista = Array.isArray(data) ? data : (data?.notas || data?.items || data?.result || data?.data || []);
         const notas = lista.map(item => ({
@@ -247,11 +354,9 @@ class NfseScraperService {
             linkDownloadXml: item.linkXml || item.urlXml || '',
             linkDownloadPdf: item.linkPdf || item.urlPdf || '',
         }));
-        console.log('[RPA-JSON] Campos mapeados do primeiro item:', lista[0] ? Object.keys(lista[0]) : 'lista vazia');
         return { sessao: { token: null, urlRest: null }, notas };
     }
 
-    // Parse de resposta HTML com Cheerio
     async extrairDadosNotasHtml(htmlString) {
         try {
             const $ = cheerio.load(htmlString);
@@ -282,7 +387,6 @@ class NfseScraperService {
         }
     }
 
-    // Mantido para compatibilidade retroativa
     async extrairDadosNotasRecebidas(htmlString) {
         return this.extrairDadosNotasHtml(htmlString);
     }
@@ -298,25 +402,24 @@ class NfseScraperService {
             return { dataInicio: `${sd}/${sm}/${sy}`, dataFim: `${ed}/${em}/${ey}` };
         }
 
-        if (period === 'retroativo') {
-            const inicio = new Date(now.getFullYear(), now.getMonth() - 3, 1);
-            return { dataInicio: fmt(inicio), dataFim: fmt(now) };
-        }
+        const trintaDiasAtras = new Date();
+        trintaDiasAtras.setDate(now.getDate() - 30);
 
-        if (period === 'ano') {
-            const inicio = new Date(now.getFullYear(), 0, 1);
-            return { dataInicio: fmt(inicio), dataFim: fmt(now) };
+        if (period === 'retroativo' || period === 'ano') {
+            return { dataInicio: fmt(trintaDiasAtras), dataFim: fmt(now) };
         }
 
         if (period === 'anterior') {
-            const inicio = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-            const fim = new Date(now.getFullYear(), now.getMonth(), 0);
-            return { dataInicio: fmt(inicio), dataFim: fmt(fim) };
+            const inicioMesAnterior = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+            const fimMesAnterior = new Date(now.getFullYear(), now.getMonth(), 0);
+            const inicioEfetivo = inicioMesAnterior < trintaDiasAtras ? trintaDiasAtras : inicioMesAnterior;
+            return { dataInicio: fmt(inicioEfetivo), dataFim: fmt(fimMesAnterior) };
         }
 
-        // 'atual' — mês corrente
+        // 'atual'
         const inicio = new Date(now.getFullYear(), now.getMonth(), 1);
-        return { dataInicio: fmt(inicio), dataFim: fmt(now) };
+        const inicioEfetivo = inicio < trintaDiasAtras ? trintaDiasAtras : inicio;
+        return { dataInicio: fmt(inicioEfetivo), dataFim: fmt(now) };
     }
 
     _delay(ms) {
@@ -345,26 +448,30 @@ class NfseScraperService {
     async processarDownloadsNotas(apiClient, notasExtraidas, pastaDestino, formatoDesejado = 'xml', accessToken = null) {
         try {
             await fsPromises.mkdir(pastaDestino, { recursive: true });
-
             let sucessoCount = 0;
             let falhaCount = 0;
 
             for (const nota of notasExtraidas) {
+                // SÓ BAIXAR SE NÃO EXISTIR LOCALMENTE (Opcional, mas bom para performance)
+                const ext = formatoDesejado === 'xml' ? 'xml' : 'pdf';
+                const caminho = path.join(pastaDestino, `${nota.chaveTabela}.${ext}`);
+
+                if (fs.existsSync(caminho)) {
+                    // log(`[RPA-DOWNLOAD] Arquivo ${nota.chaveTabela}.${ext} já existe localmente. Pulando.`);
+                    sucessoCount++;
+                    continue;
+                }
+
                 if (formatoDesejado === 'xml' && nota.linkDownloadXml) {
-                    const caminho = path.join(pastaDestino, `${nota.chaveTabela}.xml`);
                     const ok = await this.descarregarFicheiroNfs(apiClient, nota.linkDownloadXml, caminho, accessToken);
                     if (ok) sucessoCount++; else falhaCount++;
                 } else if (formatoDesejado === 'pdf' && nota.linkDownloadPdf) {
-                    const caminho = path.join(pastaDestino, `${nota.chaveTabela}.pdf`);
                     const ok = await this.descarregarFicheiroNfs(apiClient, nota.linkDownloadPdf, caminho, accessToken);
                     if (ok) sucessoCount++; else falhaCount++;
                 }
                 await this._delay(300);
             }
-
-            console.log(`[RPA-BATCH] Downloads: ${sucessoCount} ok, ${falhaCount} falhas`);
             return { sucessoCount, falhaCount };
-
         } catch (error) {
             console.error('[RPA-BATCH] Erro no lote de downloads:', error.message);
             throw error;

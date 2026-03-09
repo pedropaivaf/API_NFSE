@@ -4,11 +4,16 @@ const nfseScraperService = require('../services/nfseScraperService');
 const certificateService = require('../services/certificateService');
 
 // POST /scraper/validate-cert
-router.post('/validate-cert', (req, res) => {
-    const { certificateFilename, password } = req.body;
+router.post('/validate-cert', async (req, res) => {
+    const { method = 'pfx', certificateFilename, password, loginCnpj, loginPassword } = req.body;
     try {
-        const result = certificateService.validateCertificate(certificateFilename, password);
-        res.json({ success: true, ...result });
+        if (method === 'pfx') {
+            const result = certificateService.validateCertificate(certificateFilename, password);
+            return res.json({ success: true, ...result });
+        } else {
+            const result = await nfseScraperService.validateLogin({ method, loginCnpj, loginPassword });
+            return res.json({ success: true, ...result });
+        }
     } catch (err) {
         res.status(400).json({ success: false, error: err.message });
     }

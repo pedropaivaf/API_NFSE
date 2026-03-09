@@ -111,8 +111,9 @@ exports.createCompany = async (req, res) => {
                 {
                     name,
                     cnpj,
-                    certificate_password: password, // In production, encrypt this!
-                    certificate_url: filePath
+                    certificate_password: password,
+                    certificate_url: filePath,
+                    certificate_local_name: localFilename || null
                 }
             ])
             .select()
@@ -143,6 +144,10 @@ exports.syncCompany = async (req, res) => {
 exports.updateCompanyCredentials = async (req, res) => {
     const { id } = req.params;
     const { certificateLocalName, password } = req.body;
+    const { log } = require('../utils/logger');
+
+    console.log(`[CREDENTIALS] Solicitado salvamento para empresa ${id}`);
+    log(`[CREDENTIALS] Atualizando: Cert=${certificateLocalName}, Senha=${password ? '***' : 'VAZIA'}`);
 
     try {
         const { data, error } = await supabase
@@ -155,7 +160,12 @@ exports.updateCompanyCredentials = async (req, res) => {
             .select()
             .single();
 
-        if (error) throw error;
+        if (error) {
+            console.error('[CREDENTIALS] Erro Supabase:', error);
+            throw error;
+        }
+
+        console.log(`[CREDENTIALS] Sucesso para empresa ${id}`);
         res.json(data);
     } catch (error) {
         console.error('Update Credentials Error:', error);

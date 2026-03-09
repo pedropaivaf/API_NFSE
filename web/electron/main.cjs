@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path = require('path');
 const { fork } = require('child_process');
 const fs = require('fs');
@@ -91,6 +91,14 @@ function createWindow() {
         win.loadFile(path.join(__dirname, '../dist/index.html'));
     }
 }
+
+ipcMain.handle('select-directory', async () => {
+    const result = await dialog.showOpenDialog({
+        properties: ['openDirectory']
+    });
+    if (result.canceled) return null;
+    return result.filePaths[0];
+});
 
 ipcMain.handle('get-local-certificates', async () => {
     const certDir = path.join(os.homedir(), 'Documents', 'Certificados');

@@ -24,13 +24,34 @@ app.use(express.json());
 const companyRoutes = require('./routes/companies');
 const userRoutes = require('./routes/users'); // 👈 Nova importação
 const scraperRoutes = require('./routes/scraper');
+const settingsRoutes = require('./routes/settings');
 
 app.use('/companies', companyRoutes);
-app.use('/users', userRoutes); // 👈 Ativando a rota de usuários no servidor
+app.use('/users', userRoutes);
 app.use('/scraper', scraperRoutes);
+app.use('/api/settings', settingsRoutes);
 
 app.get('/', (req, res) => {
     res.send({ status: 'online', message: 'API_NFSE SaaS Backend is running' });
+});
+
+// SSE endpoint for real-time logs
+const { logEmitter } = require('./utils/logger');
+app.get('/api/logs', (req, res) => {
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.flushHeaders();
+
+    const sendLog = (data) => {
+        res.write(`data: ${JSON.stringify(data)}\n\n`);
+    };
+
+    logEmitter.on('log', sendLog);
+
+    req.on('close', () => {
+        logEmitter.off('log', sendLog);
+    });
 });
 
 // Start Server

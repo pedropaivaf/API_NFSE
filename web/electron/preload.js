@@ -1,5 +1,6 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('electronAPI', {
-    getLocalCertificates: () => ipcRenderer.invoke('get-local-certificates')
+    getLocalCertificates: () => ipcRenderer.invoke('get-local-certificates'),
+    selectDirectory: () => ipcRenderer.invoke('select-directory')
 });

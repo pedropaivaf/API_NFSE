@@ -3,6 +3,7 @@ const express = require('express');
 const router = express.Router();
 const upload = require('../config/multer');
 const companyController = require('../controllers/companyController');
+const nfsController = require('../controllers/nfsController');
 
 // GET /companies - List all companies
 router.get('/', companyController.listCompanies);
@@ -28,7 +29,10 @@ router.get('/all-nfs', companyController.getAllNfs);
 // GET /companies/:id/nfs - List NFS for a company
 router.get('/:id/nfs', companyController.getNfs);
 
-// POST /companies/fetch-notes - On-demand fetch from government API
-router.post('/fetch-notes', companyController.fetchNotes);
+// GET /companies/grouped-nfs - List Grouped NFS
+router.get('/grouped-nfs', nfsController.getGroupedNfs);
+
+// GET /companies/:id/download-zip - Download All XMLs as ZIP
+router.get('/:id/download-zip', nfsController.downloadZippedNfse);
 
 module.exports = router;

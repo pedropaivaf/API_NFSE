@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
-import { Search, Loader2, AlertCircle, Building2, HardDrive, ShieldCheck, Calendar, CheckCircle, PlusCircle } from 'lucide-react';
+import { Search, Loader2, AlertCircle, Building2, HardDrive, ShieldCheck, Calendar, CheckCircle, PlusCircle, FileCode } from 'lucide-react';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
@@ -19,10 +19,14 @@ export default function BuscarNota() {
     const [error, setError] = useState(null);
     const [success, setSuccess] = useState(null);
 
+    const [authMethod, setAuthMethod] = useState('pfx'); // 'pfx' ou 'password'
+
     const [formData, setFormData] = useState({
         companyId: '',
         certificateFilename: '',
         password: '',
+        loginCnpj: '',
+        loginPassword: '',
         type: 'recebidas',
         period: 'atual',
         format: 'xml',
@@ -71,44 +75,69 @@ export default function BuscarNota() {
         fetchFiles();
     }, []);
 
-    const [saveCredentials, setSaveCredentials] = useState(true);
+    const [saveCredentials, setSaveCredentials] = useState(() => {
+        const saved = localStorage.getItem('saveUserPassword');
+        return saved !== null ? JSON.parse(saved) : true;
+    });
+
+    useEffect(() => {
+        localStorage.setItem('saveUserPassword', JSON.stringify(saveCredentials));
+    }, [saveCredentials]);
+
+    const [logs, setLogs] = useState([]);
+    const [showLogs, setShowLogs] = useState(false);
+
+    useEffect(() => {
+        let eventSource;
+        if (showLogs) {
+            eventSource = new EventSource(`${API_URL}/api/logs`);
+            eventSource.onmessage = (e) => {
+                const newLog = JSON.parse(e.data);
+                setLogs(prev => [...prev.slice(-100), newLog]); // Keep last 100 logs
+            };
+            eventSource.onerror = (e) => {
+                console.error("SSE Error:", e);
+                eventSource.close();
+            };
+        }
+        return () => {
+            if (eventSource) eventSource.close();
+        };
+    }, [showLogs]);
 
     const handleChange = (e) => {
         const { name, value, type, checked } = e.target;
         const val = type === 'checkbox' ? checked : value;
-        setFormData({ ...formData, [name]: val });
+
+        setFormData(prev => ({ ...prev, [name]: val }));
 
         if (name === 'certificateFilename' || name === 'password') {
             setCertInfo(null);
             setCompanyNotFound(false);
         }
-
-        // Auto-load credentials when company is selected
-        if (name === 'companyId' && value) {
-            const company = companies.find(c => c.id === value);
-            if (company) {
-                setFormData(prev => ({
-                    ...prev,
-                    certificateFilename: company.certificate_local_name || prev.certificateFilename,
-                    password: company.certificate_password || prev.password
-                }));
-            }
-        }
     };
 
     const handleValidateCert = async () => {
-        if (!formData.certificateFilename || !formData.password) {
+        if (authMethod === 'pfx' && (!formData.certificateFilename || !formData.password)) {
             setError('Selecione o certificado e informe a senha para validar.');
             return;
         }
+        if (authMethod === 'password' && (!formData.loginCnpj || !formData.loginPassword)) {
+            setError('Informe o Usuário (CPF/CNPJ) e a senha para validar.');
+            return;
+        }
+
         setLoadingValidate(true);
         setCertInfo(null);
         setCompanyNotFound(false);
         setError(null);
         try {
             const res = await axios.post(`${API_URL}/scraper/validate-cert`, {
+                method: authMethod,
                 certificateFilename: formData.certificateFilename,
                 password: formData.password,
+                loginCnpj: formData.loginCnpj,
+                loginPassword: formData.loginPassword
             });
             const info = res.data;
             setCertInfo(info);
@@ -118,81 +147,79 @@ export default function BuscarNota() {
                 const cnpjLimpo = info.cnpj.replace(/\D/g, '');
                 const matched = companies.find(c => c.cnpj?.replace(/\D/g, '') === cnpjLimpo);
                 if (matched) {
-                    setFormData(prev => ({
-                        ...prev,
-                        companyId: matched.id,
-                        certificateFilename: matched.certificate_local_name || prev.certificateFilename,
-                        password: matched.certificate_password || prev.password
-                    }));
+                    setFormData(prev => ({ ...prev, companyId: matched.id }));
+                    console.log(`[DEBUG] Empresa identificada automaticamente: ${matched.name}`);
                 } else {
-                    setCompanyNotFound(true);
+                    // Se não existe, cria automaticamente
+                    setLoadingQuickRegister(true);
+                    try {
+                        const quickRes = await axios.post(`${API_URL}/companies/quick`, {
+                            name: info.cn,
+                            cnpj: cnpjLimpo,
+                        });
+                        const novaEmpresa = quickRes.data;
+                        setCompanies(prev => [...prev, novaEmpresa]);
+                        setFormData(prev => ({ ...prev, companyId: novaEmpresa.id }));
+                        console.log(`[DEBUG] Nova empresa cadastrada automaticamente: ${novaEmpresa.name}`);
+                    } catch (err) {
+                        console.error("Erro ao cadastrar empresa automática:", err);
+                        setError("Certificado válido, mas erro ao registrar empresa no sistema.");
+                    } finally {
+                        setLoadingQuickRegister(false);
+                    }
                 }
             }
         } catch (err) {
-            setError(err.response?.data?.error || 'Erro ao validar certificado.');
+            setError(err.response?.data?.error || 'Erro ao validar autenticação.');
         } finally {
             setLoadingValidate(false);
         }
     };
 
-    const handleQuickRegister = async () => {
-        if (!certInfo) return;
-        setLoadingQuickRegister(true);
-        setError(null);
-        try {
-            const res = await axios.post(`${API_URL}/companies/quick`, {
-                name: certInfo.cn,
-                cnpj: certInfo.cnpj?.replace(/\D/g, ''),
-            });
-            const novaEmpresa = res.data;
-            setCompanies(prev => [...prev, novaEmpresa]);
-            setFormData(prev => ({ ...prev, companyId: novaEmpresa.id }));
-            setCompanyNotFound(false);
-
-            // Se solicitado, salvar credenciais imediatamente para a nova empresa
-            if (saveCredentials) {
-                await axios.post(`${API_URL}/companies/${novaEmpresa.id}/credentials`, {
-                    certificateLocalName: formData.certificateFilename,
-                    password: formData.password
-                });
-            }
-        } catch (err) {
-            setError(err.response?.data?.error || 'Erro ao cadastrar empresa.');
-        } finally {
-            setLoadingQuickRegister(false);
-        }
-    };
 
     const handleSubmit = async (e) => {
         e.preventDefault();
         setError(null);
         setSuccess(null);
 
-        if (!formData.companyId) {
-            setError("Selecione uma Empresa no Sistema para salvar as notas.");
+        const payload = {
+            ...formData,
+            method: authMethod
+        };
+
+        if (!payload.companyId) {
+            setError("Valide a autenticação para identificar a empresa antes de extrair.");
             return;
         }
-        if (!formData.certificateFilename) {
+
+        if (authMethod === 'pfx' && !formData.certificateFilename) {
             setError("Selecione um certificado digital A1.");
             return;
         }
-        if (!formData.password) {
-            setError("A senha do certificado é obrigatória.");
+
+        if (authMethod === 'password' && (!formData.loginCnpj || !formData.loginPassword)) {
+            setError("Usuário (CPF/CNPJ) e senha são obrigatórios.");
             return;
         }
 
         setLoadingExtrair(true);
+        setLogs([]);
+        setShowLogs(true);
 
         try {
-            // Salvar credenciais se solicitado
-            if (saveCredentials) {
-                await axios.post(`${API_URL}/companies/${formData.companyId}/credentials`, {
-                    certificateLocalName: formData.certificateFilename,
-                    password: formData.password
-                }).catch(e => console.error("Falha ao salvar credenciais silenciosamente", e));
+            // Se for password e estiver marcado para salvar
+            if (authMethod === 'password' && saveCredentials) {
+                try {
+                    await axios.post(`${API_URL}/companies/${formData.companyId}/credentials`, {
+                        loginUser: formData.loginCnpj,
+                        loginPassword: formData.loginPassword
+                    });
+                } catch (e) {
+                    console.warn("Erro ao salvar credenciais de usuário:", e.message);
+                }
             }
 
-            const res = await axios.post(`${API_URL}/scraper/fetch-gov`, formData);
+            const res = await axios.post(`${API_URL}/scraper/fetch-gov`, payload);
             setSuccess(res.data);
         } catch (err) {
             console.error(err);
@@ -232,124 +259,138 @@ export default function BuscarNota() {
                         </div>
                     )}
 
-                    {/* 0. DESTINO DOS DADOS */}
-                    <section className="space-y-2">
-                        <div className="flex items-center gap-2 text-slate-700 font-bold uppercase text-xs tracking-wider">
-                            <Building2 size={18} />
-                            0. DESTINO DOS DADOS
-                        </div>
-                        <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-1">Empresa no Sistema</label>
-                            <select
-                                name="companyId"
-                                required
-                                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-brand-500 outline-none disabled:bg-slate-50"
-                                value={formData.companyId}
-                                onChange={handleChange}
-                                disabled={loadingCompanies}
-                            >
-                                <option value="">— Validar certificado para auto-selecionar —</option>
-                                {companies.map(c => (
-                                    <option key={c.id} value={c.id}>{c.name} ({c.cnpj})</option>
-                                ))}
-                            </select>
-                        </div>
-                        {loadingCompanies && <p className="text-xs text-brand-600 animate-pulse">Carregando empresas...</p>}
-                    </section>
+                    {/* TABS DE AUTENTICAÇÃO */}
+                    <div className="flex border-b border-slate-200">
+                        <button
+                            type="button"
+                            onClick={() => { setAuthMethod('pfx'); setCertInfo(null); }}
+                            className={`px-6 py-3 text-sm font-bold transition-all border-b-2 ${authMethod === 'pfx' ? 'border-blue-600 text-blue-600 bg-blue-50/50' : 'border-transparent text-slate-500 hover:text-slate-700 hover:bg-slate-50'}`}
+                        >
+                            <div className="flex items-center gap-2">
+                                <ShieldCheck size={18} />
+                                Certificado A1
+                            </div>
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => { setAuthMethod('password'); setCertInfo(null); }}
+                            className={`px-6 py-3 text-sm font-bold transition-all border-b-2 ${authMethod === 'password' ? 'border-blue-600 text-blue-600 bg-blue-50/50' : 'border-transparent text-slate-500 hover:text-slate-700 hover:bg-slate-50'}`}
+                        >
+                            <div className="flex items-center gap-2">
+                                <Building2 size={18} />
+                                Usuário / Senha
+                            </div>
+                        </button>
+                    </div>
 
-                    {/* 1. AUTENTICAÇÃO A1 */}
-                    <section className="space-y-4">
+                    {/* 1. AUTENTICAÇÃO */}
+                    <section className="space-y-4 pt-4">
                         <div className="flex items-center gap-2 text-slate-700 font-bold uppercase text-xs tracking-wider">
                             <ShieldCheck size={18} />
-                            1. AUTENTICAÇÃO A1
+                            1. {authMethod === 'pfx' ? 'AUTENTICAÇÃO A1' : 'ACESSO COM USUÁRIO/SENHA'}
                         </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div>
-                                <label className="block text-sm font-medium text-slate-700 mb-1">Certificado Digital (.pfx)</label>
-                                <div className="relative">
-                                    <select
-                                        name="certificateFilename"
-                                        required
-                                        className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-brand-500 outline-none appearance-none disabled:bg-slate-50"
-                                        value={formData.certificateFilename}
-                                        onChange={handleChange}
-                                        disabled={loadingFiles}
-                                    >
-                                        <option value="">Selecione um arquivo...</option>
-                                        {localFiles.map((f, i) => (
-                                            <option key={i} value={f}>{f}</option>
-                                        ))}
-                                    </select>
-                                    {loadingFiles && (
-                                        <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                                            <Loader2 size={16} className="animate-spin text-brand-600" />
-                                        </div>
-                                    )}
+
+                        {authMethod === 'pfx' ? (
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 animate-in fade-in duration-300">
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 mb-1">Certificado Digital (.pfx)</label>
+                                    <div className="relative">
+                                        <select
+                                            name="certificateFilename"
+                                            required={authMethod === 'pfx'}
+                                            className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-brand-500 outline-none appearance-none disabled:bg-slate-50"
+                                            value={formData.certificateFilename}
+                                            onChange={handleChange}
+                                            disabled={loadingFiles}
+                                        >
+                                            <option value="">Selecione um arquivo...</option>
+                                            {localFiles.map((f, i) => (
+                                                <option key={i} value={f}>{f}</option>
+                                            ))}
+                                        </select>
+                                        {loadingFiles && (
+                                            <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                                                <Loader2 size={16} className="animate-spin text-brand-600" />
+                                            </div>
+                                        )}
+                                    </div>
+                                    <p className="text-[10px] text-slate-400 mt-1 flex items-center gap-1">
+                                        <HardDrive size={10} /> Buscando em certificados locais
+                                    </p>
                                 </div>
-                                <p className="text-[10px] text-slate-400 mt-1 flex items-center gap-1">
-                                    <HardDrive size={10} /> Buscando em: %USERPROFILE%\Documents\Certificados
-                                </p>
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-slate-700 mb-1">Senha do Certificado</label>
-                                <input
-                                    name="password"
-                                    required
-                                    type="password"
-                                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-brand-500 outline-none"
-                                    value={formData.password}
-                                    onChange={handleChange}
-                                />
-                                <div className="mt-2 flex items-center gap-2">
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 mb-1">Senha do Certificado</label>
                                     <input
-                                        type="checkbox"
-                                        id="saveCredentials"
-                                        checked={saveCredentials}
-                                        onChange={(e) => setSaveCredentials(e.target.checked)}
-                                        className="rounded text-brand-600 focus:ring-brand-500"
+                                        name="password"
+                                        required={authMethod === 'pfx'}
+                                        type="password"
+                                        className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-brand-500 outline-none"
+                                        value={formData.password}
+                                        onChange={handleChange}
                                     />
-                                    <label htmlFor="saveCredentials" className="text-xs text-slate-500 cursor-pointer select-none">
-                                        Salvar estas credenciais para esta empresa
-                                    </label>
                                 </div>
                             </div>
-                        </div>
+                        ) : (
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 animate-in fade-in duration-300">
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 mb-1">Usuário (CPF/CNPJ)</label>
+                                    <input
+                                        name="loginCnpj"
+                                        required={authMethod === 'password'}
+                                        placeholder="00.000.000/0000-00"
+                                        className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-brand-500 outline-none"
+                                        value={formData.loginCnpj}
+                                        onChange={handleChange}
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="block text-sm font-medium text-slate-700 mb-1">Senha de Acesso</label>
+                                    <input
+                                        name="loginPassword"
+                                        required={authMethod === 'password'}
+                                        type="password"
+                                        className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-brand-500 outline-none"
+                                        value={formData.loginPassword}
+                                        onChange={handleChange}
+                                    />
+                                    <div className="flex items-center gap-2">
+                                        <input
+                                            type="checkbox"
+                                            id="saveUserPassword"
+                                            checked={saveCredentials}
+                                            onChange={(e) => setSaveCredentials(e.target.checked)}
+                                            className="rounded text-brand-600 focus:ring-brand-500"
+                                        />
+                                        <label htmlFor="saveUserPassword" className="text-xs text-slate-500 cursor-pointer select-none">
+                                            Salvar estas credenciais
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
 
                         <div className="flex items-center gap-3">
                             <button
                                 type="button"
                                 onClick={handleValidateCert}
-                                disabled={loadingValidate || !formData.certificateFilename || !formData.password}
+                                disabled={loadingValidate || (authMethod === 'pfx' && (!formData.certificateFilename || !formData.password)) || (authMethod === 'password' && (!formData.loginCnpj || !formData.loginPassword))}
                                 className="flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-700 border border-blue-200 rounded-lg hover:bg-blue-100 transition text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                                 {loadingValidate ? <Loader2 size={14} className="animate-spin" /> : <ShieldCheck size={14} />}
-                                Validar Certificado
+                                {authMethod === 'pfx' ? 'Validar Certificado' : 'Validar Acesso'}
                             </button>
                             {certInfo?.valid && (
-                                <div className="flex flex-col gap-2">
-                                    <div className="flex items-center gap-2 text-sm text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-2">
-                                        <CheckCircle size={16} className="text-green-600 shrink-0" />
-                                        <span>
-                                            <strong>{certInfo.cn}</strong>
-                                            {certInfo.cnpj && <span className="ml-1 text-green-600">({certInfo.cnpj})</span>}
+                                <div className="flex items-center gap-2 text-sm text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-2">
+                                    <CheckCircle size={16} className="text-green-600 shrink-0" />
+                                    <span>
+                                        Identificado: <strong>{certInfo.cn}</strong>
+                                        {certInfo.cnpj && <span className="ml-1 text-green-600">({certInfo.cnpj})</span>}
+                                        {certInfo.notAfter && (
                                             <span className="ml-2 text-xs text-green-600">
                                                 — vence {new Date(certInfo.notAfter).toLocaleDateString('pt-BR')}
                                             </span>
-                                        </span>
-                                    </div>
-                                    {companyNotFound && (
-                                        <button
-                                            type="button"
-                                            onClick={handleQuickRegister}
-                                            disabled={loadingQuickRegister}
-                                            className="flex items-center gap-2 px-3 py-2 bg-amber-50 text-amber-700 border border-amber-200 rounded-lg hover:bg-amber-100 transition text-sm font-medium disabled:opacity-50"
-                                        >
-                                            {loadingQuickRegister
-                                                ? <Loader2 size={14} className="animate-spin" />
-                                                : <PlusCircle size={14} />}
-                                            Cadastrar "{certInfo.cn}" no sistema
-                                        </button>
-                                    )}
+                                        )}
+                                    </span>
                                 </div>
                             )}
                         </div>
@@ -375,37 +416,21 @@ export default function BuscarNota() {
                                 </select>
                             </div>
                             <div>
-                                <label className="block text-sm font-medium text-slate-700 mb-1">Período Rápido</label>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">Período</label>
                                 <select
                                     name="period"
                                     className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-brand-500 outline-none"
                                     value={formData.period}
                                     onChange={handleChange}
                                 >
-                                    <option value="atual">Mês Atual</option>
-                                    <option value="anterior">Mês Anterior</option>
-                                    <option value="retroativo">3 Meses Atrás</option>
-                                    <option value="ano">Ano Atual</option>
-                                    <option value="custom">Personalizado</option>
+                                    <option value="atual">Mês Atual (até 30 dias)</option>
                                 </select>
                             </div>
                             <div>
-                                <label className="block text-sm font-medium text-slate-700 mb-1">Formato Desejado</label>
-                                <div className="flex gap-2">
-                                    <button
-                                        type="button"
-                                        onClick={() => setFormData({ ...formData, format: 'xml' })}
-                                        className={`flex-1 py-2 text-sm font-bold rounded-lg border transition ${formData.format === 'xml' ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}
-                                    >
-                                        XML
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={() => setFormData({ ...formData, format: 'pdf' })}
-                                        className={`flex-1 py-2 text-sm font-bold rounded-lg border transition ${formData.format === 'pdf' ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}
-                                    >
-                                        PDF
-                                    </button>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">Formato de Saída</label>
+                                <div className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm font-bold text-slate-600 flex items-center gap-2">
+                                    <FileCode size={16} className="text-slate-400" />
+                                    XML (Padrão Nacional)
                                 </div>
                             </div>
                         </div>
@@ -457,6 +482,34 @@ export default function BuscarNota() {
                     </div>
                 </form>
             </div>
+
+            {showLogs && (
+                <div className="bg-slate-900 rounded-xl shadow-2xl overflow-hidden border border-slate-800">
+                    <div className="px-4 py-2 bg-slate-800 border-b border-slate-700 flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                            <div className="flex gap-1.5">
+                                <div className="w-3 h-3 rounded-full bg-red-500"></div>
+                                <div className="w-3 h-3 rounded-full bg-yellow-500"></div>
+                                <div className="w-3 h-3 rounded-full bg-green-500"></div>
+                            </div>
+                            <span className="text-xs font-mono text-slate-400 ml-2">rpa-monitor.log</span>
+                        </div>
+                        <span className="text-[10px] font-mono text-slate-500 uppercase">Filtro: {formData.period === 'custom' ? `${formData.startDate} - ${formData.endDate}` : formData.period}</span>
+                    </div>
+                    <div className="p-4 h-64 overflow-y-auto font-mono text-[11px] space-y-1 bg-black/40 scrollbar-thin">
+                        {logs.length === 0 && <div className="text-slate-600 italic">Aguardando início do processo...</div>}
+                        {logs.map((l, i) => (
+                            <div key={i} className="flex gap-2 whitespace-pre-wrap">
+                                <span className="text-slate-500 shrink-0">{l.timestamp?.split('T')[1].split('.')[0]}</span>
+                                <span className={`font-bold shrink-0 ${l.type === 'error' ? 'text-red-400' : l.type === 'warn' ? 'text-yellow-400' : 'text-blue-400'}`}>
+                                    [{l.type?.toUpperCase()}]
+                                </span>
+                                <span className="text-slate-200">{l.message}</span>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
 
         </div>
     );
