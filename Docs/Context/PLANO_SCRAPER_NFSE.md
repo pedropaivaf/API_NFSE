@@ -1,11 +1,33 @@
 # Plano: Implementacao do Scraper NFSe Real
 
-## Status: v0.0.7 PRONTO — Aguardando teste completo em producao
+## Status: v0.0.9 — Aguardando teste de extração em producao
+
+### Bugs corrigidos em v0.0.9 (09/03/2026)
+- **URL errada**: `/Nota/RecebidaIndex` → `/Notas/Recebidas` (plural, sem "Index") — causava 500 MvcSiteMapProvider
+- **Bearer token**: JWT extraído do HTML do Dashboard (`window.sessionStorage.setItem("accessToken", ...)`) e enviado em todas as requisições de notas
+- **Suporte JSON**: resposta da API SERPRO pode ser JSON — handler `extrairDadosNotasJson` detecta por Content-Type
+- **Debug em Documents**: arquivos de debug salvos em `~/Documents/` (acessível fora do app empacotado)
+- **Downloads com token**: arquivos XML/PDF baixados com Bearer token no header
+
+### Bugs corrigidos em v0.0.8 (09/03/2026)
+- `rejectUnauthorized: false` — portal gov.br usa cadeia ICP-Brasil fora do bundle CA do Node.js
+- Debug HTML salvo quando governo retorna erro HTTP
 
 ### Bugs corrigidos em v0.0.7 (06/03/2026)
 - CN do certificado `NOME:CNPJ` agora é parseado corretamente — exibe só o nome
 - CNPJ extraído do `rawCn` (antes do parse), não do `cn` já limpo
 - Campo `status: 'active'` removido do insert em `createQuickCompany` e `createCompany` (coluna não existe no schema Supabase)
+
+### Arquitetura real descoberta via debug (09/03/2026)
+```
+1. GET /EmissorNacional/Certificado (mTLS pfx) → 302 → Dashboard
+2. GET /EmissorNacional/Dashboard → HTML com:
+   - window.sessionStorage.setItem("accessToken", "eyJ...") ← JWT emitido pelo SERPRO
+   - window.UrlRest = "https://restnfseprod.srv.cd.serpro"
+3. GET /EmissorNacional/Notas/Recebidas?dataInicio=...&dataFim=...
+   Authorization: Bearer {accessToken}
+   → Resposta JSON ou HTML com notas
+```
 
 ---
 
