@@ -146,17 +146,32 @@ class NfseScraperService {
             }
 
             // 8. Persistência no Supabase
+            // 8. Salvar no Banco (Supabase)
             let savedCount = 0;
-            for (const nota of objExtraido.notas) {
-                const valorStr = String(nota.valorServico || '0');
-                const valorLimpo = parseFloat(valorStr.replace(/\./g, '').replace(',', '.'));
-                const dataStr = String(nota.dataGeracao || '');
-                const [datePart, timePart] = dataStr.split(' ');
-                const parts = (datePart || '').split('/');
-                const isoDate = parts.length === 3
-                    ? `${parts[2]}-${parts[1]}-${parts[0]}T${timePart || '00:00'}:00Z`
-                    : new Date().toISOString();
+            console.log(`[RPA-DB] Tentando salvar ${objExtraido.notas.length} notas...`);
 
+            for (const nota of objExtraido.notas) {
+                // Parsing de Valor: Remove pontos de milhar e substitui vírgula por ponto
+                const valorStr = String(nota.valorServico || '0').trim();
+                const valorLimpo = parseFloat(valorStr.replace(/\./g, '').replace(',', '.'));
+
+                // Parsing de Data: Formato esperado "DD/MM/YYYY HH:MM" ou similar
+                const dataStr = String(nota.dataGeracao || '').trim();
+                let isoDate = null;
+
+                if (dataStr) {
+                    const [datePart, timePart] = dataStr.split(/\s+/);
+                    const parts = (datePart || '').split('/');
+                    if (parts.length === 3) {
+                        isoDate = `${parts[2]}-${parts[1]}-${parts[0]}T${timePart || '00:00'}:00Z`;
+                    }
+                }
+
+                if (!isoDate) {
+                    isoDate = new Date().toISOString();
+                }
+
+                // UPSERT: CRITICAL - onConflict deve ser 'col1,col2' SEM ESPAÇO para o PostgREST
                 const { error: upsertError } = await supabase
                     .from('nfs')
                     .upsert({
@@ -166,10 +181,10 @@ class NfseScraperService {
                         amount: isNaN(valorLimpo) ? 0 : valorLimpo,
                         status: 'processed',
                         xml_url: `local_extract/${type}/${nota.chaveTabela}.xml`,
-                    }, { onConflict: 'company_id, access_key' });
+                    }, { onConflict: 'company_id,access_key' });
 
                 if (upsertError) {
-                    console.error(`[RPA-DB] Erro ao salvar ${nota.chaveTabela}:`, upsertError.message);
+                    console.error(`[RPA-DB] Erro ao salvar ${nota.chaveTabela}:`, upsertError.message, upsertError.details || '');
                 } else {
                     savedCount++;
                 }
