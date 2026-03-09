@@ -41,3 +41,4 @@ Cada comando: bump de versão → `electron:build` → `git push --follow-tags`
 | 0.1.1  | 2026-03-09 | Fix TLS 1.3 vs IIS, diagnóstico mTLS, ordem cadeia cert      |
 | 0.2.1  | 2026-03-09 | Autenticação dupla (cert+senha), prevenção duplicatas, UI    |
 | 0.2.2  | 2026-03-09 | Fix período 30 dias, opção Personalizado, erro empresas não-bloqueante, remoção checkbox "Salvar chave", reorganização docs |
+| 0.2.3  | 2026-03-09 | Fix race condition: Electron agora aguarda backend (porta 3000) antes de abrir a janela |

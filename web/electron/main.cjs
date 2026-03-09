@@ -3,6 +3,30 @@ const path = require('path');
 const { fork } = require('child_process');
 const fs = require('fs');
 const os = require('os');
+const net = require('net');
+
+function waitForBackend(port, timeoutMs = 30000) {
+    return new Promise((resolve, reject) => {
+        const start = Date.now();
+        const attempt = () => {
+            const socket = new net.Socket();
+            socket.setTimeout(500);
+            socket
+                .on('connect', () => { socket.destroy(); resolve(); })
+                .on('error', () => { socket.destroy(); retry(); })
+                .on('timeout', () => { socket.destroy(); retry(); });
+            socket.connect(port, '127.0.0.1');
+        };
+        const retry = () => {
+            if (Date.now() - start > timeoutMs) {
+                reject(new Error('Backend não respondeu em ' + timeoutMs + 'ms'));
+            } else {
+                setTimeout(attempt, 400);
+            }
+        };
+        attempt();
+    });
+}
 
 const isDev = !app.isPackaged;
 
@@ -113,8 +137,9 @@ ipcMain.handle('get-local-certificates', async () => {
     }
 });
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
     startServer();
+    await waitForBackend(3000).catch(err => console.error('[Electron]', err.message));
     createWindow();
 });
 
