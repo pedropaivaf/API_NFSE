@@ -1,6 +1,17 @@
 # Plano: Implementacao do Scraper NFSe Real
 
-## Status: v0.0.9 — Aguardando teste de extração em producao
+## Status: v0.1.1 — Aguardando teste de autenticação mTLS
+
+### Bugs corrigidos em v0.1.1 (09/03/2026)
+- **TLS 1.3 vs IIS**: `maxVersion: 'TLSv1.2'` forçado — IIS 10.0 tem bugs com client cert (CertificateRequest) em TLS 1.3; Node.js negociava TLS 1.3 por padrão
+- **Diagnóstico root cause**: mTLS nunca funcionou — `includes('dashboard')` era falso positivo desde v0.0.8 (login URL = `/Login?ReturnUrl=.../Dashboard`)
+- **Ordem da cadeia**: leaf cert ordenado primeiro; fallback para `keyBag` além de `pkcs8ShroudedKeyBag`
+- **Validação TLS context**: valida par cert+key antes de autenticar (detecta chave inválida cedo)
+- **Log da cadeia**: imprime CN de cada cert para diagnóstico
+
+### Bugs corrigidos em v0.1.0 (09/03/2026)
+- Auth check: `pathname.endsWith('/dashboard')` em vez de `includes('dashboard')` (falso positivo)
+- Extração PEM via node-forge em vez de pfx buffer direto
 
 ### Bugs corrigidos em v0.0.9 (09/03/2026)
 - **URL errada**: `/Nota/RecebidaIndex` → `/Notas/Recebidas` (plural, sem "Index") — causava 500 MvcSiteMapProvider
