@@ -7,6 +7,7 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 export default function BuscarNota() {
     const [loadingCompanies, setLoadingCompanies] = useState(false);
     const [companies, setCompanies] = useState([]);
+    const [companiesError, setCompaniesError] = useState(null);
 
     const [loadingFiles, setLoadingFiles] = useState(false);
     const [localFiles, setLocalFiles] = useState([]);
@@ -36,13 +37,13 @@ export default function BuscarNota() {
 
     const fetchCompanies = async () => {
         setLoadingCompanies(true);
+        setCompaniesError(null);
         try {
             const res = await axios.get(`${API_URL}/companies`);
             setCompanies(res.data || []);
-            setError(null); // Clear previous errors if successful
         } catch (err) {
             console.error("Fetch Companies Error:", err);
-            setError("Não foi possível carregar a lista de empresas. O backend está rodando?");
+            setCompaniesError("Não foi possível carregar empresas. Verifique se o backend está rodando.");
         } finally {
             setLoadingCompanies(false);
         }
@@ -202,6 +203,24 @@ export default function BuscarNota() {
             return;
         }
 
+        if (formData.period === 'custom') {
+            if (!formData.startDate || !formData.endDate) {
+                setError("Informe as datas de início e fim para o período personalizado.");
+                return;
+            }
+            const start = new Date(formData.startDate);
+            const end = new Date(formData.endDate);
+            if (end < start) {
+                setError("A data de fim não pode ser anterior à data de início.");
+                return;
+            }
+            const diffDays = (end - start) / (1000 * 60 * 60 * 24);
+            if (diffDays > 30) {
+                setError("O intervalo personalizado não pode exceder 30 dias (limite do portal NFSe).");
+                return;
+            }
+        }
+
         setLoadingExtrair(true);
         setLogs([]);
         setShowLogs(true);
@@ -240,6 +259,22 @@ export default function BuscarNota() {
                 </div>
 
                 <form onSubmit={handleSubmit} className="p-6 space-y-8">
+                    {companiesError && (
+                        <div className="p-3 bg-amber-50 text-amber-700 text-xs rounded-lg border border-amber-200 flex items-center justify-between gap-2">
+                            <span className="flex items-center gap-2">
+                                <AlertCircle size={14} className="shrink-0" />
+                                {companiesError}
+                            </span>
+                            <button
+                                type="button"
+                                onClick={fetchCompanies}
+                                className="text-xs font-semibold underline hover:text-amber-900 shrink-0"
+                            >
+                                Tentar novamente
+                            </button>
+                        </div>
+                    )}
+
                     {error && (
                         <div className="p-4 bg-red-50 text-red-600 text-sm rounded-lg border border-red-100 flex items-center gap-2">
                             <AlertCircle size={20} />
@@ -423,7 +458,8 @@ export default function BuscarNota() {
                                     value={formData.period}
                                     onChange={handleChange}
                                 >
-                                    <option value="atual">Mês Atual (até 30 dias)</option>
+                                    <option value="atual">Mês Atual (últimos 30 dias)</option>
+                                    <option value="custom">Personalizado</option>
                                 </select>
                             </div>
                             <div>
@@ -436,27 +472,38 @@ export default function BuscarNota() {
                         </div>
 
                         {formData.period === 'custom' && (
-                            <div className="grid grid-cols-2 gap-4 p-4 bg-slate-50 rounded-lg animate-in fade-in slide-in-from-top-2">
-                                <div>
-                                    <label className="block text-xs font-bold text-slate-500 mb-1">DE</label>
-                                    <input
-                                        name="startDate"
-                                        type="date"
-                                        className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-brand-500"
-                                        value={formData.startDate}
-                                        onChange={handleChange}
-                                    />
+                            <div className="p-4 bg-slate-50 rounded-lg border border-slate-200 animate-in fade-in slide-in-from-top-2 space-y-3">
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block text-xs font-bold text-slate-500 mb-1">DE</label>
+                                        <input
+                                            name="startDate"
+                                            type="date"
+                                            max={new Date().toISOString().split('T')[0]}
+                                            className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-brand-500"
+                                            value={formData.startDate}
+                                            onChange={handleChange}
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-bold text-slate-500 mb-1">ATÉ</label>
+                                        <input
+                                            name="endDate"
+                                            type="date"
+                                            min={formData.startDate || undefined}
+                                            max={formData.startDate
+                                                ? new Date(new Date(formData.startDate).getTime() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+                                                : new Date().toISOString().split('T')[0]}
+                                            className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-brand-500"
+                                            value={formData.endDate}
+                                            onChange={handleChange}
+                                        />
+                                    </div>
                                 </div>
-                                <div>
-                                    <label className="block text-xs font-bold text-slate-500 mb-1">ATÉ</label>
-                                    <input
-                                        name="endDate"
-                                        type="date"
-                                        className="w-full px-3 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-brand-500"
-                                        value={formData.endDate}
-                                        onChange={handleChange}
-                                    />
-                                </div>
+                                <p className="text-xs text-amber-600 flex items-center gap-1">
+                                    <AlertCircle size={12} />
+                                    Intervalo máximo de 30 dias (limite do portal NFSe Gov.br)
+                                </p>
                             </div>
                         )}
                     </section>

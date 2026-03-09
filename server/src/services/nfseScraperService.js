@@ -416,10 +416,8 @@ class NfseScraperService {
             return { dataInicio: fmt(inicioEfetivo), dataFim: fmt(fimMesAnterior) };
         }
 
-        // 'atual'
-        const inicio = new Date(now.getFullYear(), now.getMonth(), 1);
-        const inicioEfetivo = inicio < trintaDiasAtras ? trintaDiasAtras : inicio;
-        return { dataInicio: fmt(inicioEfetivo), dataFim: fmt(now) };
+        // 'atual' → sempre últimos 30 dias (respeita limite do portal NFSe)
+        return { dataInicio: fmt(trintaDiasAtras), dataFim: fmt(now) };
     }
 
     _delay(ms) {

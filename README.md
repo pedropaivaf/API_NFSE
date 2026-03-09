@@ -1,115 +1,87 @@
-# API NFSe - Baixador de XMLs (DF-e)
+# API NFSe — Baixador de NFS-e
 
-Aplicacao desktop (Electron) para autenticar via Certificado Digital A1 e baixar automaticamente XMLs de Notas Fiscais de Servico (NFS-e) do Portal Nacional do Governo Federal.
+**v0.2.2** · Electron 28 + React 19 + Express 5 + Supabase
+
+Aplicação desktop para autenticar via **Certificado Digital A1 (mTLS)** ou **usuário/senha** e baixar automaticamente XMLs de Notas Fiscais de Serviço do Portal Nacional Gov.br.
+
+---
 
 ## Funcionalidades
 
-- Autenticacao SSL mutua com certificado `.pfx`
-- Cadastro de multiplas empresas
-- Sincronizacao automatica (cron) e manual
-- Download, descompactacao (GZIP/Base64) e armazenamento dos XMLs
-- Dashboard com historico e status por empresa
-- Logs de sincronizacao
+- Autenticação mTLS com certificado `.pfx` ou usuário/senha
+- Cadastro de múltiplas empresas
+- Extração de NFS-e com período configurável (últimos 30 dias ou personalizado)
+- Sincronização automática (cron) e manual
+- Download e armazenamento de XMLs
+- Dashboard com histórico e status por empresa
 
 ---
 
-## Pre-requisitos
+## Início Rápido
+
+### Pré-requisitos
 
 - [Node.js](https://nodejs.org/) v18 ou superior
-- Certificado Digital A1 (`.pfx` ou `.p12`) e senha
+- Certificado Digital A1 (`.pfx`) e/ou credenciais do portal Gov.br
 - Conta no [Supabase](https://supabase.com/) (gratuita)
 
----
-
-## Instalacao e Configuracao
-
-### 1. Clonar o repositorio
+### Instalação
 
 ```bash
 git clone <url-do-repositorio>
 cd API_NFSE
-```
 
-### 2. Configurar o Supabase
-
-**a) Criar as tabelas** - No SQL Editor do Supabase, execute o arquivo:
-```
-server/supabase/migrations/00_init_schema.sql
-```
-
-**b) Criar os buckets de Storage:**
-- `certificates` (privado)
-- `xmls` (privado)
-
-> Instrucoes detalhadas em [Docs/Context/INSTRUCOES_SETUP.md](Docs/Context/INSTRUCOES_SETUP.md)
-
-### 3. Configurar variaveis de ambiente
-
-**Backend** - crie `server/.env`:
-```ini
-PORT=3000
-SUPABASE_URL=https://xxxxxxxx.supabase.co
-SUPABASE_ANON_KEY=sua_service_role_key
-URL_API_PRODUCAO=https://adn.nfse.gov.br/contribuintes/DFe/0
-```
-
-**Frontend** - crie `web/.env`:
-```ini
-VITE_SUPABASE_URL=https://xxxxxxxx.supabase.co
-VITE_SUPABASE_ANON_KEY=sua_anon_key_publica
-VITE_API_URL=http://localhost:3000
-```
-
-### 4. Instalar dependencias
-
-```bash
 cd server && npm install && cd ..
 cd web && npm install && cd ..
 ```
 
----
+### Configurar Supabase
 
-## Executar em Desenvolvimento
+Execute as migrações SQL no SQL Editor do Supabase e crie os buckets `certificates` e `xmls` (privados).
 
-```bash
-# Terminal 1 - Backend
-cd server
-npm start
+> Instruções completas: [docs/setup/supabase.md](docs/setup/supabase.md)
 
-# Terminal 2 - Frontend + Electron
-cd web
-npm run electron:dev
-```
-
----
-
-## Gerar o Executavel (Build)
+### Configurar Variáveis de Ambiente
 
 ```bash
-cd web
-npm run electron:build
+cp server/.env.example server/.env   # preencher SUPABASE_URL e SUPABASE_ANON_KEY
+cp web/.env.example web/.env         # preencher VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY
 ```
 
-O instalador sera gerado em:
-```
-web/dist-electron/API NFSe Setup X.X.X.exe
-```
+> Guia de variáveis: [docs/setup/environment.md](docs/setup/environment.md)
 
-Para fazer release com bump de versao automatico:
+### Rodar em Desenvolvimento
+
 ```bash
-cd web
-npm run release:patch   # 0.0.4 -> 0.0.5
-npm run release:minor   # 0.0.4 -> 0.1.0
-npm run release:major   # 0.0.4 -> 1.0.0
+# Terminal 1 — Backend
+cd server && npm start
+
+# Terminal 2 — Frontend + Electron
+cd web && npm run electron:dev
 ```
 
-> Guia completo de build em [Docs/Context/WORKFLOW_BUILD.md](Docs/Context/WORKFLOW_BUILD.md)
+### Gerar Executável
+
+```bash
+cd web && npm run electron:build
+# Saída: web/dist-electron/API NFSe Setup X.X.X.exe
+```
 
 ---
 
-## Versao Atual
+## Documentação
 
-`v0.0.4` - Electron 28 + React 19 + Express 5 + Supabase
+Toda a documentação está centralizada em **[docs/](docs/README.md)**:
+
+| Seção | Documento |
+|-------|-----------|
+| Arquitetura | [docs/architecture/overview.md](docs/architecture/overview.md) |
+| Setup Supabase | [docs/setup/supabase.md](docs/setup/supabase.md) |
+| Variáveis de Ambiente | [docs/setup/environment.md](docs/setup/environment.md) |
+| Desenvolvimento | [docs/guides/development.md](docs/guides/development.md) |
+| Build e Release | [docs/guides/build-release.md](docs/guides/build-release.md) |
+| Plataforma e Rotas | [docs/guides/saas-platform.md](docs/guides/saas-platform.md) |
+| Scraper NFSe | [docs/implementation/scraper-nfse.md](docs/implementation/scraper-nfse.md) |
 
 ---
 
@@ -117,27 +89,9 @@ npm run release:major   # 0.0.4 -> 1.0.0
 
 ```
 API_NFSE/
-├── web/              # Frontend React + Electron shell
-│   └── dist-electron/  # Instalador gerado (API NFSe Setup X.X.X.exe)
-├── server/           # Backend Express + workers de sincronizacao
-├── Docs/
-│   ├── Context/      # Documentacao: arquitetura, setup, workflows
-│   └── ...           # Exemplos de configuracao
+├── web/          # Frontend React + shell Electron
+├── server/       # Backend Express + workers + migrações SQL
+├── docs/         # Documentação centralizada
+├── .project-context.md  # Resumo técnico para agentes de IA
 └── README.md
 ```
-
-> Documentacao completa em [Docs/Context/](Docs/Context/)
-
----
-
-## Proximo Passo (06/03/2026)
-
-```bash
-git pull origin main
-```
-
-Execute o plano completo em [Docs/Context/PLANO_SCRAPER_NFSE.md](Docs/Context/PLANO_SCRAPER_NFSE.md):
-
-- **Sprint 1** — pode executar imediatamente (validacao de cert, fix IPC, fix schema)
-- **Pre-requisito** — mapear o fluxo de login com Chrome DevTools (HAR export)
-- **Sprint 2 + 3** — login real + scraping real, depois de ter o fluxo mapeado

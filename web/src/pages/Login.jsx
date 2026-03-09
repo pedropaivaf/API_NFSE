@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { KeyRound, Loader2, AlertCircle } from 'lucide-react';
@@ -9,17 +9,7 @@ export default function Login() {
     const navigate = useNavigate();
     const [loading, setLoading] = useState(false);
     const [accessKey, setAccessKey] = useState('');
-    const [rememberKey, setRememberKey] = useState(false);
     const [error, setError] = useState(null);
-
-    // Carrega a chave salva automaticamente se existir
-    useEffect(() => {
-        const savedKey = localStorage.getItem('savedAccessKey');
-        if (savedKey) {
-            setAccessKey(savedKey);
-            setRememberKey(true);
-        }
-    }, []);
 
     const handleLogin = async (e) => {
         e.preventDefault();
@@ -47,13 +37,6 @@ export default function Login() {
         try {
             const res = await axios.post(`${API_URL}/users/login`, { access_key: accessKey });
             const { user } = res.data;
-
-            // Salva ou remove a chave do PC conforme o checkbox
-            if (rememberKey) {
-                localStorage.setItem('savedAccessKey', accessKey);
-            } else {
-                localStorage.removeItem('savedAccessKey');
-            }
 
             localStorage.setItem('isAuthenticated', 'true');
             localStorage.setItem('userRole', user.role || 'USER');
@@ -101,19 +84,6 @@ export default function Login() {
                             value={accessKey}
                             onChange={(e) => setAccessKey(e.target.value.toUpperCase())}
                         />
-                    </div>
-
-                    <div className="flex items-center">
-                        <input
-                            id="remember"
-                            type="checkbox"
-                            className="w-4 h-4 text-brand-600 border-gray-300 rounded focus:ring-brand-500"
-                            checked={rememberKey}
-                            onChange={(e) => setRememberKey(e.target.checked)}
-                        />
-                        <label htmlFor="remember" className="ml-2 text-sm text-slate-600 cursor-pointer">
-                            Salvar chave para o próximo acesso
-                        </label>
                     </div>
 
                     <button
