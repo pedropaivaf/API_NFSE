@@ -42,3 +42,4 @@ Cada comando: bump de versão → `electron:build` → `git push --follow-tags`
 | 0.2.1  | 2026-03-09 | Autenticação dupla (cert+senha), prevenção duplicatas, UI    |
 | 0.2.2  | 2026-03-09 | Fix período 30 dias, opção Personalizado, erro empresas não-bloqueante, remoção checkbox "Salvar chave", reorganização docs |
 | 0.2.3  | 2026-03-09 | Fix race condition: Electron agora aguarda backend (porta 3000) antes de abrir a janela |
+| 0.2.4  | 2026-03-09 | Fix URL do projeto Supabase (transposição de caracteres no project ref), atualiza package-lock |
