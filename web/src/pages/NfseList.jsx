@@ -1,5 +1,5 @@
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
 import { FileText, Search, Loader2, Download, AlertCircle, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 
@@ -46,34 +46,39 @@ export default function NfseList() {
         setSortConfig({ key, direction });
     };
 
-    const sortedNfs = [...nfs].sort((a, b) => {
-        if (!sortConfig.key) return 0;
-
-        let aValue = a[sortConfig.key];
-        let bValue = b[sortConfig.key];
-
-        if (sortConfig.key === 'amount') {
-            aValue = parseFloat(aValue);
-            bValue = parseFloat(bValue);
-        }
-
-        if (aValue < bValue) {
-            return sortConfig.direction === 'asc' ? -1 : 1;
-        }
-        if (aValue > bValue) {
-            return sortConfig.direction === 'asc' ? 1 : -1;
-        }
-        return 0;
-    });
-
-    const filteredNfs = sortedNfs.filter(note => {
+    // Performance optimization: Filter first, then sort
+    // Filtering first reduces the number of elements to sort from O(N log N) to O(M log M) where M is the filtered subset
+    const filteredAndSortedNfs = useMemo(() => {
+        // 1. Filter
         const term = searchTerm.toLowerCase();
-        const companyName = note.companies?.name?.toLowerCase() || '';
-        const accessKey = note.access_key?.toLowerCase() || '';
-        const status = note.status?.toLowerCase() || '';
+        const filtered = nfs.filter(note => {
+            const companyName = note.companies?.name?.toLowerCase() || '';
+            const accessKey = note.access_key?.toLowerCase() || '';
+            const status = note.status?.toLowerCase() || '';
+            return companyName.includes(term) || accessKey.includes(term) || status.includes(term);
+        });
 
-        return companyName.includes(term) || accessKey.includes(term) || status.includes(term);
-    });
+        // 2. Sort the filtered subset
+        return filtered.sort((a, b) => {
+            if (!sortConfig.key) return 0;
+
+            let aValue = a[sortConfig.key];
+            let bValue = b[sortConfig.key];
+
+            if (sortConfig.key === 'amount') {
+                aValue = parseFloat(aValue);
+                bValue = parseFloat(bValue);
+            }
+
+            if (aValue < bValue) {
+                return sortConfig.direction === 'asc' ? -1 : 1;
+            }
+            if (aValue > bValue) {
+                return sortConfig.direction === 'asc' ? 1 : -1;
+            }
+            return 0;
+        });
+    }, [nfs, searchTerm, sortConfig]);
 
     return (
         <div className="space-y-6">
@@ -128,13 +133,13 @@ export default function NfseList() {
                         <Loader2 className="animate-spin mb-2" size={24} />
                         Carregando notas...
                     </div>
-                ) : filteredNfs.length === 0 ? (
+                ) : filteredAndSortedNfs.length === 0 ? (
                     <div className="py-20 text-center text-slate-400">
                         {searchTerm ? 'Nenhuma nota encontrada para sua busca.' : 'Nenhuma nota fiscal encontrada no sistema.'}
                     </div>
                 ) : (
                     <div className="divide-y divide-slate-100">
-                        {filteredNfs.map((note) => (
+                        {filteredAndSortedNfs.map((note) => (
                             <div key={note.id} className="grid grid-cols-12 gap-4 px-6 py-4 items-center hover:bg-slate-50 transition text-sm">
                                 <div className="col-span-3 text-slate-900 font-medium truncate" title={note.companies?.name}>
                                     {note.companies?.name || 'Empresa removida'}
