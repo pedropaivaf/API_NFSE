@@ -47,6 +47,14 @@ Servidor: Microsoft-IIS/10.0 + ASP.NET MVC 5.2
 
 ## Histórico de Bugs e Correções
 
+### v0.3.3 (10/03/2026)
+- **Correção de Falso Positivo**: Ajustada regex/string matching para ignorar o callout de ajuda do portal ("O período informado não deve ser superior a 30 dias") que era confundido com um erro de validação.
+- **Parametrização**: Limpeza de parâmetros redundantes na query string (`dataInicio`) em favor de `datainicio` (minúsculo) para compatibilidade absoluta.
+
+### v0.3.0 - v0.3.2 (Mês de Março 2026)
+- **Extração Histórica**: Implementado `_splitPeriodIntoChunks` que fragmenta pedidos em blocos de 15 dias.
+- **Persistence Layer**: Integração com Supabase para salvar `competence_date` derivado do campo `extrairDadosNotasJson` ou `extrairDadosNotasHtml`.
+
 ### v0.2.10 (10/03/2026)
 - **Fix Download Window**: Substituído `window.open` por disparador de link oculto para evitar abertura de janelas em branco no Electron durante o download de ZIPs.
 

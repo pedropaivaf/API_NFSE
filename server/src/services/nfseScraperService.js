@@ -269,106 +269,133 @@ class NfseScraperService {
 
         try {
             // 5. Calcular período de datas
-            const { dataInicio, dataFim } = this._calcularPeriodo(period, startDate, endDate);
-            log(`[RPA] Período solicitado: ${dataInicio} → ${dataFim}`);
+            const requestedPeriod = this._calcularPeriodo(period, startDate, endDate);
+            
+            // 6. Dividir em chunks de 30 dias se necessário (limite do portal)
+            const chunks = this._splitPeriodIntoChunks(requestedPeriod.dataInicio, requestedPeriod.dataFim);
+            log(`[RPA] Iniciando extração de ${chunks.length} períodos para cobrir o intervalo solicitado.`);
 
-            // 6. Buscar notas
-            const notasTipo = type === 'emitidas' ? 'Emitidas' : 'Recebidas';
-            const notasUrl = `${BASE_URL}/Notas/${notasTipo}`;
+            let totalSaved = 0;
+            let totalFound = 0;
 
-            const params = {
-                dataInicio,
-                dataFim,
-                datainicio: dataInicio,
-                datafim: dataFim,
-                executar: '1'
-            };
+            for (const chunk of chunks) {
+                log(`[RPA] Processando intervalo: ${chunk.dataInicio} → ${chunk.dataFim}`);
+                
+                const notasTipo = type === 'emitidas' ? 'Emitidas' : 'Recebidas';
+                const notasUrl = `${BASE_URL}/Notas/${notasTipo}`;
 
-            const notasResp = await apiClient.get(notasUrl, {
-                params,
-                headers: {
-                    'Authorization': `Bearer ${accessToken}`,
-                    'Referer': `${BASE_URL}/Dashboard`,
-                },
-            });
+                const params = {
+                    datainicio: chunk.dataInicio,
+                    datafim: chunk.dataFim,
+                    busca: '',
+                    executar: '1'
+                };
 
-            const contentType = notasResp.headers?.['content-type'] || '';
+                const notasResp = await apiClient.get(notasUrl, {
+                    params,
+                    headers: {
+                        'Authorization': `Bearer ${accessToken}`,
+                        'Referer': `${BASE_URL}/Dashboard`,
+                    },
+                });
 
-            let objExtraido;
-            if (contentType.includes('json')) {
-                objExtraido = this.extrairDadosNotasJson(notasResp.data);
-            } else {
-                const htmlData = String(notasResp.data || '');
-                if (htmlData.includes('não deve ser superior a 30 dias')) {
-                    log('[RPA-LIMIT] O portal recusou o período por ser superior a 30 dias.', 'warn');
+                const contentType = notasResp.headers?.['content-type'] || '';
+                let objExtraido;
+                if (contentType.includes('json')) {
+                    objExtraido = this.extrairDadosNotasJson(notasResp.data);
+                } else {
+                    const htmlData = String(notasResp.data || '');
+                    
+                    // O portal tem um texto estático de ajuda: "O período informado não deve ser superior a 30 dias."
+                    // O ERRO real é: "O período entre a data inicial e a data final não pode ser superior a 30 dias."
+                    // Verificamos também a classe de validação do ASP.NET MVC.
+                    const isErrorMsg = htmlData.includes('não pode ser superior a 30 dias') || 
+                                     htmlData.includes('input-validation-error') ||
+                                     htmlData.includes('field-validation-error');
+
+                    if (isErrorMsg) {
+                        log(`[RPA-LIMIT] O portal recusou o período ${chunk.dataInicio}-${chunk.dataFim}. Verifique as datas.`, 'warn');
+                        await this._delay(2000);
+                        continue;
+                    }
+                    objExtraido = await this.extrairDadosNotasHtml(htmlData);
                 }
-                objExtraido = await this.extrairDadosNotasHtml(htmlData);
-            }
 
-            log(`[RPA] ${objExtraido.notas.length} notas encontradas.`);
+                totalFound += objExtraido.notas.length;
+                log(`[RPA] ${objExtraido.notas.length} notas no intervalo atual.`);
 
-            // 8. Salvar no Banco (Supabase) com Prevenção de Duplicatas
-            let savedCount = 0;
-            for (const nota of objExtraido.notas) {
-                try {
-                    if (nota.chaveTabela) {
-                        const { data: existing } = await supabase
+                // 8. Salvar no Banco (Supabase) com Prevenção de Duplicatas e Competência
+                for (const nota of objExtraido.notas) {
+                    try {
+                        if (nota.chaveTabela) {
+                            const { data: existing } = await supabase
+                                .from('nfs')
+                                .select('access_key')
+                                .eq('company_id', companyId)
+                                .eq('access_key', nota.chaveTabela)
+                                .maybeSingle();
+
+                            if (existing) continue;
+                        }
+
+                        const valorStr = String(nota.valorServico || '0').trim();
+                        const valorLimpo = parseFloat(valorStr.replace(/R\$\s*/g, '').replace(/\./g, '').replace(',', '.'));
+
+                        const dataStr = String(nota.dataGeracao || '').trim();
+                        let isoDate = null;
+                        if (dataStr) {
+                            const [datePart, timePart] = dataStr.split(/\s+/);
+                            const parts = (datePart || '').split('/');
+                            if (parts.length === 3) {
+                                let ano = parts[2];
+                                if (ano.length === 2) ano = `20${ano}`;
+                                isoDate = `${ano}-${parts[1]}-${parts[0]}T${timePart || '00:00'}:00Z`;
+                            }
+                        }
+                        if (!isoDate) isoDate = new Date().toISOString();
+
+                        // Tratar Competência (MM/YYYY)
+                        let competenceDate = null;
+                        let competencePeriod = String(nota.competencia || '').trim();
+                        if (competencePeriod.includes('/')) {
+                            const [mm, yyyy] = competencePeriod.split('/');
+                            competenceDate = `${yyyy}-${mm}-01`;
+                        }
+
+                        const insertData = {
+                            company_id: companyId,
+                            access_key: nota.chaveTabela,
+                            issue_date: isoDate,
+                            amount: isNaN(valorLimpo) ? 0 : valorLimpo,
+                            status: 'processed',
+                            xml_url: `local_extract/${type}/${nota.chaveTabela}.xml`,
+                            competence_date: competenceDate,
+                            competence_period: competencePeriod || null
+                        };
+
+                        const { error: upsertError } = await supabase
                             .from('nfs')
-                            .select('access_key')
-                            .eq('company_id', companyId)
-                            .eq('access_key', nota.chaveTabela)
-                            .maybeSingle();
+                            .upsert(insertData, { onConflict: 'company_id,access_key' });
 
-                        if (existing) {
-                            log(`[RPA-DB] Nota ${nota.chaveTabela.substring(0, 10)}... já existe. Pulando.`);
-                            continue;
-                        }
+                        if (!upsertError) totalSaved++;
+                    } catch (e) {
+                        log(`[RPA-DB] Falha na nota ${nota.chaveTabela}: ${e.message}`, 'error');
                     }
-
-                    const valorStr = String(nota.valorServico || '0').trim();
-                    const valorLimpo = parseFloat(valorStr.replace(/R\$\s*/g, '').replace(/\./g, '').replace(',', '.'));
-
-                    const dataStr = String(nota.dataGeracao || '').trim();
-                    let isoDate = null;
-                    if (dataStr) {
-                        const [datePart, timePart] = dataStr.split(/\s+/);
-                        const parts = (datePart || '').split('/');
-                        if (parts.length === 3) {
-                            let ano = parts[2];
-                            if (ano.length === 2) ano = `20${ano}`;
-                            isoDate = `${ano}-${parts[1]}-${parts[0]}T${timePart || '00:00'}:00Z`;
-                        }
-                    }
-                    if (!isoDate) isoDate = new Date().toISOString();
-
-                    const insertData = {
-                        company_id: companyId,
-                        access_key: nota.chaveTabela,
-                        issue_date: isoDate,
-                        amount: isNaN(valorLimpo) ? 0 : valorLimpo,
-                        status: 'processed',
-                        xml_url: `local_extract/${type}/${nota.chaveTabela}.xml`,
-                    };
-
-                    const { error: upsertError } = await supabase
-                        .from('nfs')
-                        .upsert(insertData, { onConflict: 'company_id,access_key' });
-
-                    if (!upsertError) savedCount++;
-                } catch (e) {
-                    log(`[RPA-DB] Falha crítica na nota ${nota.chaveTabela}: ${e.message}`, 'error');
                 }
-            }
 
-            // 9. Downloads para disco
-            const pastaDestino = path.join(outputDir, type);
-            await this.processarDownloadsNotas(apiClient, objExtraido.notas, pastaDestino, (format || 'xml').toLowerCase(), accessToken);
+                // 9. Downloads para disco (do intervalo atual)
+                const pastaDestino = path.join(outputDir, type);
+                await this.processarDownloadsNotas(apiClient, objExtraido.notas, pastaDestino, (format || 'xml').toLowerCase(), accessToken);
+                
+                // Delay curto entre chunks para evitar bloqueio
+                if (chunks.length > 1) await this._delay(1000);
+            }
 
             return {
                 success: true,
-                message: `Extração concluída com sucesso.`,
-                count: savedCount,
-                details: `${objExtraido.notas.length} notas processadas. ${savedCount} persistidas no banco.`,
+                message: `Extração concluída.`,
+                count: totalSaved,
+                details: `${totalFound} notas encontradas. ${totalSaved} novas notas persistidas.`,
             };
 
         } catch (error) {
@@ -431,6 +458,12 @@ class NfseScraperService {
         const fmt = (d) =>
             `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
 
+        if (period === 'history') {
+            const cincoAnosAtras = new Date();
+            cincoAnosAtras.setFullYear(now.getFullYear() - 5);
+            return { dataInicio: fmt(cincoAnosAtras), dataFim: fmt(now) };
+        }
+
         if (period === 'custom' && startDate && endDate) {
             const [sy, sm, sd] = startDate.split('-');
             const [ey, em, ed] = endDate.split('-');
@@ -447,12 +480,43 @@ class NfseScraperService {
         if (period === 'anterior') {
             const inicioMesAnterior = new Date(now.getFullYear(), now.getMonth() - 1, 1);
             const fimMesAnterior = new Date(now.getFullYear(), now.getMonth(), 0);
-            const inicioEfetivo = inicioMesAnterior < trintaDiasAtras ? trintaDiasAtras : inicioMesAnterior;
-            return { dataInicio: fmt(inicioEfetivo), dataFim: fmt(fimMesAnterior) };
+            return { dataInicio: fmt(inicioMesAnterior), dataFim: fmt(fimMesAnterior) };
         }
 
-        // 'atual' → sempre últimos 30 dias (respeita limite do portal NFSe)
+        // 'atual'
         return { dataInicio: fmt(trintaDiasAtras), dataFim: fmt(now) };
+    }
+
+    _splitPeriodIntoChunks(dataInicioStr, dataFimStr) {
+        const parseDate = (dStr) => {
+            const [d, m, y] = dStr.split('/');
+            return new Date(y, m - 1, d);
+        };
+        const fmt = (d) =>
+            `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
+
+        let currentStart = parseDate(dataInicioStr);
+        const finalEnd = parseDate(dataFimStr);
+        const chunks = [];
+
+        while (currentStart < finalEnd) {
+            let nextEnd = new Date(currentStart);
+            nextEnd.setDate(currentStart.getDate() + 14); // 15 dias no máximo para evitar erro de limite
+
+            if (nextEnd > finalEnd) {
+                nextEnd = finalEnd;
+            }
+
+            chunks.push({
+                dataInicio: fmt(currentStart),
+                dataFim: fmt(nextEnd)
+            });
+
+            currentStart = new Date(nextEnd);
+            currentStart.setDate(nextEnd.getDate() + 1);
+        }
+
+        return chunks;
     }
 
     _delay(ms) {

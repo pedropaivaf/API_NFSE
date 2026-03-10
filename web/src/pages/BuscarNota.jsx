@@ -459,6 +459,7 @@ export default function BuscarNota() {
                                     onChange={handleChange}
                                 >
                                     <option value="atual">Mês Atual (últimos 30 dias)</option>
+                                    <option value="history">Todo o Histórico (Últimos 5 Anos)</option>
                                     <option value="custom">Personalizado</option>
                                 </select>
                             </div>

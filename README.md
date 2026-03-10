@@ -1,19 +1,14 @@
-# API NFSe — Baixador de NFS-e
+# API NFSe - Automação Nacional (mTLS & Senha)
+**Versão:** v0.3.3
+**Status:** Produção Estável
 
-**v0.2.10** · Electron 28 + React 19 + Express 5 + Supabase
+Este projeto é uma ferramenta de automação para busca, extração e organização de Notas Fiscais de Serviço eletrônicas (NFS-e) diretamente do Portal Nacional (nfse.gov.br), utilizando tanto Certificados Digitais A1 (mTLS) quanto login por usuário e senha.
 
-Aplicação desktop para autenticar via **Certificado Digital A1 (mTLS)** ou **usuário/senha** e baixar automaticamente XMLs de Notas Fiscais de Serviço do Portal Nacional Gov.br.
-
----
-
-## Funcionalidades
-
-- Autenticação mTLS com certificado `.pfx` ou usuário/senha
-- Cadastro de múltiplas empresas
-- Extração de NFS-e com período configurável (últimos 30 dias ou personalizado)
-- Sincronização automática (cron) e manual
-- Download e armazenamento de XMLs
-- Dashboard com histórico e status por empresa
+## ✨ Novidades da Versão 0.3.3
+- **Extração Histórica Completa**: Novo motor de loop que divide períodos longos (até 5 anos) em blocos de 15 dias para contornar limites do portal.
+- **Agrupamento por Competência**: Notas agora são salvas com `competence_date` e exibidas na UI em blocos organizados por Mês/Ano.
+- **Download Inteligente**: ZIPs filtrados por competência e correção de bugs de interface no Electron.
+- **Resiliência a Falsos Positivos**: Detecção aprimorada de erros reais vs textos informativos do portal.
 
 ---
 

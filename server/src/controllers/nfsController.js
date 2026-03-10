@@ -8,18 +8,24 @@ const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SER
 
 exports.downloadZippedNfse = async (req, res) => {
     const { id } = req.params; // companyId
+    const { period } = req.query; // Filtro de competência opcional (ex: 03/2024)
 
     try {
         // 1. Get NFSe data from Supabase for this company
-        const { data: nfs, error } = await supabase
+        let query = supabase
             .from('nfs')
             .select('*, companies(name, cnpj)')
-            .eq('company_id', id)
-            .order('issue_date', { ascending: false });
+            .eq('company_id', id);
+
+        if (period) {
+            query = query.eq('competence_period', period);
+        }
+
+        const { data: nfs, error } = await query.order('issue_date', { ascending: false });
 
         if (error) throw error;
         if (!nfs || nfs.length === 0) {
-            return res.status(404).json({ error: 'Nenhuma nota encontrada para esta empresa.' });
+            return res.status(404).json({ error: 'Nenhuma nota encontrada para o período solicitado.' });
         }
 
         // 2. Buscar configurações globais para o caminho de saída
@@ -149,7 +155,7 @@ exports.getGroupedNfs = async (req, res) => {
 
         if (error) throw error;
 
-        // Group by company
+        // Group by company then by competence
         const grouped = data.reduce((acc, note) => {
             const companyId = note.companies.id;
             if (!acc[companyId]) {
@@ -157,14 +163,41 @@ exports.getGroupedNfs = async (req, res) => {
                     id: companyId,
                     name: note.companies.name,
                     cnpj: note.companies.cnpj,
+                    competences: {} // Grouping by month
+                };
+            }
+
+            const month = note.competence_period || 'Sem Competência';
+            if (!acc[companyId].competences[month]) {
+                acc[companyId].competences[month] = {
+                    period: month,
+                    count: 0,
+                    totalAmount: 0,
                     notes: []
                 };
             }
-            acc[companyId].notes.push(note);
+
+            acc[companyId].competences[month].notes.push(note);
+            acc[companyId].competences[month].count++;
+            acc[companyId].competences[month].totalAmount += parseFloat(note.amount || 0);
+
             return acc;
         }, {});
 
-        res.json(Object.values(grouped));
+        // Transform competences object into sorted array
+        const result = Object.values(grouped).map(company => ({
+            ...company,
+            competences: Object.values(company.competences).sort((a, b) => {
+                // Sort by MM/YYYY descending
+                if (a.period === 'Sem Competência') return 1;
+                if (b.period === 'Sem Competência') return -1;
+                const [ma, ya] = a.period.split('/');
+                const [mb, yb] = b.period.split('/');
+                return (yb + mb) - (ya + ma);
+            })
+        }));
+
+        res.json(result);
     } catch (error) {
         console.error('Grouped NFS Error:', error);
         res.status(500).json({ error: error.message });
