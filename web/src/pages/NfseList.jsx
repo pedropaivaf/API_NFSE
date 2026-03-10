@@ -44,7 +44,13 @@ export default function NfseList() {
 
     const handleDownloadZip = (companyId, companyName) => {
         const downloadUrl = `${API_URL}/companies/${companyId}/download-zip`;
-        window.open(downloadUrl, '_blank');
+        // Use hidden link instead of window.open to avoid spawning blank windows in Electron
+        const link = document.createElement('a');
+        link.href = downloadUrl;
+        link.setAttribute('download', `${companyName}_notas.zip`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
     };
 
     const handleReset = async (companyId, companyName) => {

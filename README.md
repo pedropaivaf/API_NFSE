@@ -1,6 +1,6 @@
 # API NFSe — Baixador de NFS-e
 
-**v0.2.9** · Electron 28 + React 19 + Express 5 + Supabase
+**v0.2.10** · Electron 28 + React 19 + Express 5 + Supabase
 
 Aplicação desktop para autenticar via **Certificado Digital A1 (mTLS)** ou **usuário/senha** e baixar automaticamente XMLs de Notas Fiscais de Serviço do Portal Nacional Gov.br.
 

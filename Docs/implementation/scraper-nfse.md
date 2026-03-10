@@ -47,6 +47,9 @@ Servidor: Microsoft-IIS/10.0 + ASP.NET MVC 5.2
 
 ## Histórico de Bugs e Correções
 
+### v0.2.10 (10/03/2026)
+- **Fix Download Window**: Substituído `window.open` por disparador de link oculto para evitar abertura de janelas em branco no Electron durante o download de ZIPs.
+
 ### v0.2.9 (10/03/2026)
 - **Sucesso Resiliente**: Login agora aceita redirecionamentos tanto para `/EmissorNacional` quanto para `/Dashboard`.
 - **Validação de Backup**: Adicionada checagem por `accessToken` no HTML caso o redirecionamento URL varie.
