@@ -47,6 +47,10 @@ Servidor: Microsoft-IIS/10.0 + ASP.NET MVC 5.2
 
 ## Histórico de Bugs e Correções
 
+### v0.3.4 (10/03/2026)
+- **Extração Acelerada**: Chunking aumentado para **28 dias**. Delays reduzidos para **500ms** (chunks) e **100ms** (downloads).
+- **Safety Note**: Caso ocorram bloqueios de IP ou erros recorrentes "input-validation-error" sem motivo aparente, reverter os delays para os valores de 1s e 300ms respectivamente.
+
 ### v0.3.3 (10/03/2026)
 - **Correção de Falso Positivo**: Ajustada regex/string matching para ignorar o callout de ajuda do portal ("O período informado não deve ser superior a 30 dias") que era confundido com um erro de validação.
 - **Parametrização**: Limpeza de parâmetros redundantes na query string (`dataInicio`) em favor de `datainicio` (minúsculo) para compatibilidade absoluta.

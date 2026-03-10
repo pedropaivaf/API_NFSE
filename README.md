@@ -1,8 +1,12 @@
 # API NFSe - Automação Nacional (mTLS & Senha)
-**Versão:** v0.3.3
+**Versão:** v0.3.4
 **Status:** Produção Estável
 
 Este projeto é uma ferramenta de automação para busca, extração e organização de Notas Fiscais de Serviço eletrônicas (NFS-e) diretamente do Portal Nacional (nfse.gov.br), utilizando tanto Certificados Digitais A1 (mTLS) quanto login por usuário e senha.
+
+## ✨ Novidades da Versão 0.3.4
+- **Otimização de Velocidade**: Janela de extração aumentada para **28 dias** (limite portal 30) e redução agressiva de delays (500ms entre chunks, 100ms por download).
+- **Recuperação de Erros**: Em caso de erros de limite do portal, recomenda-se voltar para os delays "seguros" de 1s/2s no `nfseScraperService.js`.
 
 ## ✨ Novidades da Versão 0.3.3
 - **Extração Histórica Completa**: Novo motor de loop que divide períodos longos (até 5 anos) em blocos de 15 dias para contornar limites do portal.
