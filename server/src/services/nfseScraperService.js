@@ -315,7 +315,7 @@ class NfseScraperService {
 
                     if (isErrorMsg) {
                         log(`[RPA-LIMIT] O portal recusou o período ${chunk.dataInicio}-${chunk.dataFim}. Verifique as datas.`, 'warn');
-                        await this._delay(2000);
+                        await this._delay(1000);
                         continue;
                     }
                     objExtraido = await this.extrairDadosNotasHtml(htmlData);
@@ -388,7 +388,7 @@ class NfseScraperService {
                 await this.processarDownloadsNotas(apiClient, objExtraido.notas, pastaDestino, (format || 'xml').toLowerCase(), accessToken);
                 
                 // Delay curto entre chunks para evitar bloqueio
-                if (chunks.length > 1) await this._delay(1000);
+                if (chunks.length > 1) await this._delay(500);
             }
 
             return {
@@ -501,7 +501,7 @@ class NfseScraperService {
 
         while (currentStart < finalEnd) {
             let nextEnd = new Date(currentStart);
-            nextEnd.setDate(currentStart.getDate() + 14); // 15 dias no máximo para evitar erro de limite
+            nextEnd.setDate(currentStart.getDate() + 27); // 28 dias no máximo (limite portal 30) para acelerar sem risco de bloqueio
 
             if (nextEnd > finalEnd) {
                 nextEnd = finalEnd;
@@ -566,7 +566,7 @@ class NfseScraperService {
                     const ok = await this.descarregarFicheiroNfs(apiClient, nota.linkDownloadPdf, caminho, accessToken);
                     if (ok) sucessoCount++; else falhaCount++;
                 }
-                await this._delay(300);
+                await this._delay(100);
             }
             return { sucessoCount, falhaCount };
         } catch (error) {
