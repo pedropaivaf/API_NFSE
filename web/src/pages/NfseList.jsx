@@ -42,7 +42,7 @@ export default function NfseList() {
         setExpandedCompanies(prev => ({ ...prev, [id]: !prev[id] }));
     };
 
-    const handleDownloadZip = (companyId, companyName) => {
+    const handleDownloadZip = (companyId) => {
         const downloadUrl = `${API_URL}/companies/${companyId}/download-zip`;
         window.open(downloadUrl, '_blank');
     };
@@ -116,8 +116,17 @@ export default function NfseList() {
                         <div key={group.id} className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden transition-all">
                             {/* Company Header */}
                             <div
-                                className={`px-6 py-4 flex items-center justify-between cursor-pointer transition ${expandedCompanies[group.id] ? 'bg-slate-50 border-b border-slate-200' : 'hover:bg-slate-50'}`}
+                                role="button"
+                                tabIndex={0}
+                                aria-expanded={!!expandedCompanies[group.id]}
+                                className={`px-6 py-4 flex items-center justify-between cursor-pointer transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-inset ${expandedCompanies[group.id] ? 'bg-slate-50 border-b border-slate-200' : 'hover:bg-slate-50'}`}
                                 onClick={() => toggleCompany(group.id)}
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Enter' || e.key === ' ') {
+                                        e.preventDefault();
+                                        toggleCompany(group.id);
+                                    }
+                                }}
                             >
                                 <div className="flex items-center gap-4">
                                     <div className="h-10 w-10 rounded-full bg-brand-100 text-brand-700 flex items-center justify-center font-bold">
@@ -133,9 +142,9 @@ export default function NfseList() {
                                     </div>
                                 </div>
                                 <div className="flex items-center gap-3">
-                                    <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                                    <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
                                         <button
-                                            onClick={() => handleDownloadZip(group.id, group.name)}
+                                            onClick={() => handleDownloadZip(group.id)}
                                             className="flex items-center gap-2 px-3 py-1.5 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700 transition shadow-md shadow-blue-100"
                                         >
                                             <Download size={16} />
