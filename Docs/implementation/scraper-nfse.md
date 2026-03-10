@@ -47,6 +47,18 @@ Servidor: Microsoft-IIS/10.0 + ASP.NET MVC 5.2
 
 ## Histórico de Bugs e Correções
 
+### v0.2.9 (10/03/2026)
+- **Sucesso Resiliente**: Login agora aceita redirecionamentos tanto para `/EmissorNacional` quanto para `/Dashboard`.
+- **Validação de Backup**: Adicionada checagem por `accessToken` no HTML caso o redirecionamento URL varie.
+- **Diagnostics**: `debug_auth_redirect.html` agora salva o corpo da resposta em caso de falha.
+
+### v0.2.8 (10/03/2026)
+- **Formatação de CNPJ**: Campo de Inscrição agora aplica máscara `00.000.000/0000-00` automaticamente (exigência do portal).
+
+### v0.2.7 (10/03/2026)
+- **Browser Parity**: Headers atualizados para Chrome 145, `sec-ch-ua` formatado exatamente como o navegador.
+- **Ordem de Campos**: `URLSearchParams` seguindo a ordem exata do FORM HTML (`token -> Inscricao -> Senha -> ReturnUrl`).
+
 ### v0.2.2 (09/03/2026)
 - Período "Mês Atual" alterado para sempre usar últimos 30 dias
 - Opção "Personalizado" com validação de intervalo máximo de 30 dias

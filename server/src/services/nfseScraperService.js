@@ -165,13 +165,31 @@ class NfseScraperService {
         });
     }
 
+    _formatCpfCnpj(val) {
+        const clean = (val || '').replace(/\D/g, '');
+        if (clean.length === 11) {
+            return clean.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
+        } else if (clean.length === 14) {
+            return clean.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, '$1.$2.$3/$4-$5');
+        }
+        return val;
+    }
+
     _getCommonHeaders() {
         return {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36',
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-            'Accept-Language': 'pt-BR,pt;q=0.9',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+            'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
             'Cache-Control': 'no-cache',
             'Pragma': 'no-cache',
+            'sec-ch-ua': '"Not:A-Brand";v="99", "Google Chrome";v="145", "Chromium";v="145"',
+            'sec-ch-ua-mobile': '?0',
+            'sec-ch-ua-platform': '"Windows"',
+            'sec-fetch-dest': 'document',
+            'sec-fetch-mode': 'navigate',
+            'sec-fetch-site': 'same-origin',
+            'sec-fetch-user': '?1',
+            'upgrade-insecure-requests': '1',
         };
     }
 
@@ -184,16 +202,26 @@ class NfseScraperService {
             console.warn('[RPA-LOGIN] CSRF Token não encontrado na página de login.');
         }
 
+        const loginClean = (login || '').trim();
+        const formattedLogin = this._formatCpfCnpj(loginClean);
         const params = new URLSearchParams();
-        params.append('CPFCNPJ', login);
-        params.append('Senha', password);
+        // Ordem exata do formulário no navegador: Token -> Inscricao -> Senha -> ReturnUrl
         if (rvToken) params.append('__RequestVerificationToken', rvToken);
+        params.append('Inscricao', formattedLogin);
+        params.append('Senha', (password || '').trim());
         params.append('ReturnUrl', '/EmissorNacional');
 
-        return apiClient.post(`${BASE_URL}/Login`, params.toString(), {
+        // Log de Cookies para diagnóstico
+        try {
+            const cookies = await apiClient.defaults.httpsAgent.cookies.jar.getCookieString(BASE_URL);
+            fs.writeFileSync(path.join(os.homedir(), 'Documents', 'debug_cookies.txt'), cookies || 'Sem cookies');
+        } catch (e) { console.error('[DEBUG-COOKIES] Erro:', e.message); }
+
+        return apiClient.post(`${BASE_URL}/Login?ReturnUrl=%2fEmissorNacional`, params.toString(), {
             headers: {
                 'Content-Type': 'application/x-www-form-urlencoded',
-                'Referer': `${BASE_URL}/Login`,
+                'Referer': `${BASE_URL}/Login?ReturnUrl=%2fEmissorNacional`,
+                'Origin': 'https://www.nfse.gov.br',
             }
         });
     }
@@ -203,12 +231,19 @@ class NfseScraperService {
         let finalPathname = '';
         try { finalPathname = new URL(finalUrl).pathname.toLowerCase(); } catch (_) { finalPathname = finalUrl.toLowerCase(); }
 
-        if (!finalPathname.endsWith('/dashboard')) {
+        const isDashboardOrRoot = finalPathname.endsWith('/dashboard') || 
+                                   finalPathname.endsWith('/emissornacional') || 
+                                   finalPathname.endsWith('/emissornacional/');
+
+        const hasAuthMarkers = typeof authResp.data === 'string' && 
+                               (authResp.data.includes('window.UrlRest') || authResp.data.includes('accessToken'));
+
+        if (!isDashboardOrRoot && !hasAuthMarkers) {
             const debugLoginPath = path.join(os.homedir(), 'Documents', 'debug_auth_redirect.html');
             fs.writeFileSync(debugLoginPath, String(authResp.data || ''));
             throw new Error(`Autenticação falhou — verifique se usuário/senha estão corretos. Detalhes em Documents/debug_auth_redirect.html.`);
         }
-        console.log('[RPA] Autenticado com sucesso no Dashboard.');
+        console.log('[RPA] Autenticado com sucesso.');
         return true;
     }
 
