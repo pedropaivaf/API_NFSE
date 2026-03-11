@@ -140,7 +140,15 @@ export default function NfseList() {
                         <div key={group.id} className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden transition-all">
                             {/* Company Header */}
                             <div
-                                className={`px-6 py-4 flex items-center justify-between cursor-pointer transition ${expandedCompanies[group.id] ? 'bg-slate-50 border-b border-slate-200' : 'hover:bg-slate-50'}`}
+                                role="button"
+                                tabIndex={0}
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Enter' || e.key === ' ') {
+                                        e.preventDefault();
+                                        toggleCompany(group.id);
+                                    }
+                                }}
+                                className={`px-6 py-4 flex items-center justify-between cursor-pointer transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-inset ${expandedCompanies[group.id] ? 'bg-slate-50 border-b border-slate-200' : 'hover:bg-slate-50'}`}
                                 onClick={() => toggleCompany(group.id)}
                             >
                                 <div className="flex items-center gap-4">
@@ -185,7 +193,15 @@ export default function NfseList() {
                                         <div key={comp.period} className="bg-white rounded-lg border border-slate-200 shadow-sm overflow-hidden">
                                             {/* Competence Sub-Header */}
                                             <div 
-                                                className="px-4 py-2 bg-slate-100/50 flex items-center justify-between cursor-pointer hover:bg-slate-100 transition"
+                                                role="button"
+                                                tabIndex={0}
+                                                onKeyDown={(e) => {
+                                                    if (e.key === 'Enter' || e.key === ' ') {
+                                                        e.preventDefault();
+                                                        toggleCompetence(group.id, comp.period);
+                                                    }
+                                                }}
+                                                className="px-4 py-2 bg-slate-100/50 flex items-center justify-between cursor-pointer hover:bg-slate-100 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-inset"
                                                 onClick={() => toggleCompetence(group.id, comp.period)}
                                             >
                                                 <div className="flex items-center gap-3">
@@ -244,10 +260,11 @@ export default function NfseList() {
                                                                     <td className="px-6 py-2 text-right">
                                                                         <button
                                                                             onClick={() => handleDownloadSingleXml(note.xml_url)}
-                                                                            className="p-1 text-slate-400 hover:text-brand-600 rounded-lg transition"
+                                                                            className="p-1 text-slate-400 hover:text-brand-600 rounded-lg transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-inset"
                                                                             title="Ver XML"
+                                                                            aria-label="Ver XML"
                                                                         >
-                                                                            <ExternalLink size={14} />
+                                                                            <ExternalLink size={14} aria-hidden="true" />
                                                                         </button>
                                                                     </td>
                                                                 </tr>
