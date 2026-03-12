@@ -1,0 +1,3 @@
+## 2024-03-12 - Interactive List Header Accessibility Constraint
+**Learning:** When improving accessibility for interactive list headers (like the accordion headers in `web/src/pages/NfseList.jsx`), converting the wrapper `<div>` to a native `<button>` can create invalid HTML if the header contains nested action buttons (like the download or reset buttons).
+**Action:** In these situations, retain the `<div>` wrapper but manually add semantic roles and keyboard interaction: `role="button"`, `tabIndex={0}`, `aria-expanded`, focus states (`focus-visible`), and an `onKeyDown` handler that responds to 'Enter' and 'Space'.
