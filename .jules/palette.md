@@ -1,0 +1,3 @@
+## 2024-05-15 - Interactive List Headers containing Action Buttons
+**Learning:** Using `<div>` elements for interactive accordion wrappers that also contain other interactive elements (like action buttons) presents a unique accessibility challenge in React apps. Changing the `<div>` wrapper directly to a `<button>` creates invalid HTML because `<button>` tags cannot be nested inside each other.
+**Action:** When an interactive wrapper needs to contain other buttons, retain the `<div>` element but add `role="button"`, `tabIndex={0}`, and an `onKeyDown` handler to simulate native button behavior. Always include `focus-visible` classes (like `focus-visible:ring-2`) to ensure these elements have visual indicators when navigated via keyboard.
