@@ -32,8 +32,11 @@ export default function BuscarNota() {
         period: 'atual',
         format: 'xml',
         startDate: '',
-        endDate: ''
+        endDate: '',
+        syncMonth: new Date().toISOString().substring(0, 7) // YYYY-MM
     });
+    const [isBulkSync, setIsBulkSync] = useState(false);
+    const [bulkProgress, setBulkProgress] = useState({ total: 0, current: 0, currentName: '' });
 
     const fetchCompanies = async () => {
         setLoadingCompanies(true);
@@ -123,7 +126,7 @@ export default function BuscarNota() {
                     loginCnpj: selected.login_user || selected.cnpj || prev.loginCnpj,
                     loginPassword: selected.login_password || prev.loginPassword
                 }));
-                if (selected.certificate_local_name) {
+                if (selected.certificate_local_name || selected.certificate_url) {
                     setAuthMethod('pfx');
                 } else if (selected.login_user) {
                     setAuthMethod('password');
@@ -267,6 +270,52 @@ export default function BuscarNota() {
         }
     };
 
+    const handleBulkSync = async () => {
+        if (!confirm(`Deseja iniciar a sincronização de ${companies.length} empresas para o mês ${formData.syncMonth}?`)) return;
+
+        setLoadingExtrair(true);
+        setIsBulkSync(true);
+        setBulkProgress({ total: companies.length, current: 0, currentName: '' });
+        setError(null);
+        setSuccess(null);
+        setLogs([]);
+        setShowLogs(true);
+
+        const [year, month] = formData.syncMonth.split('-');
+        const startDate = `01/${month}/${year}`;
+        const lastDay = new Date(year, month, 0).getDate();
+        const endDate = `${lastDay}/${month}/${year}`;
+
+        for (let i = 0; i < companies.length; i++) {
+            const company = companies[i];
+            setBulkProgress(prev => ({ ...prev, current: i + 1, currentName: company.name }));
+            
+            try {
+                const payload = {
+                    companyId: company.id,
+                    type: formData.type,
+                    period: 'custom',
+                    startDate: startDate,
+                    endDate: endDate,
+                    method: (company.certificate_local_name || company.certificate_url) ? 'pfx' : 'password',
+                    certificateFilename: company.certificate_local_name,
+                    password: company.certificate_password,
+                    loginCnpj: company.login_user || company.cnpj,
+                    loginPassword: company.login_password
+                };
+
+                await axios.post(`${API_URL}/scraper/fetch-gov`, payload);
+            } catch (err) {
+                console.error(`Erro na empresa ${company.name}:`, err);
+                // Continue with next company
+            }
+        }
+
+        setSuccess({ message: "Sincronização em lote concluída!", count: companies.length });
+        setLoadingExtrair(false);
+        setIsBulkSync(false);
+    };
+
     return (
         <div className="max-w-4xl mx-auto space-y-6">
             <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
@@ -340,6 +389,46 @@ export default function BuscarNota() {
                         <p className="text-[10px] text-slate-400 italic">
                             Selecionar uma empresa irá preencher automaticamente os dados de login e certificado salvos.
                         </p>
+
+                        <div className="pt-2 flex items-center gap-4">
+                            <div className="flex-1 space-y-2 p-4 bg-brand-50 rounded-xl border border-brand-100">
+                                <label className="block text-xs font-bold text-brand-700 uppercase">Sincronização em Lote (Mensal)</label>
+                                <div className="flex gap-2">
+                                    <input 
+                                        type="month"
+                                        name="syncMonth"
+                                        className="flex-1 px-3 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-brand-500 bg-white"
+                                        value={formData.syncMonth}
+                                        onChange={handleChange}
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={handleBulkSync}
+                                        disabled={loadingExtrair || companies.length === 0}
+                                        className="px-4 py-2 bg-brand-600 text-white rounded-lg hover:bg-brand-700 disabled:opacity-50 font-bold text-sm shadow-sm transition"
+                                    >
+                                        Sincronizar Todas ({companies.length})
+                                    </button>
+                                </div>
+                                <p className="text-[10px] text-brand-600">Busca automaticamente notas de todas as empresas cadastradas para o mês selecionado.</p>
+                            </div>
+                        </div>
+
+                        {isBulkSync && (
+                            <div className="mt-4 p-4 bg-slate-900 text-white rounded-xl space-y-2 animate-pulse">
+                                <div className="flex justify-between text-xs font-mono">
+                                    <span>PROCESSANDO LOTE...</span>
+                                    <span>{bulkProgress.current} / {bulkProgress.total}</span>
+                                </div>
+                                <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
+                                    <div 
+                                        className="h-full bg-brand-500 transition-all duration-500" 
+                                        style={{ width: `${(bulkProgress.current / bulkProgress.total) * 100}%` }}
+                                    ></div>
+                                </div>
+                                <p className="text-[10px] text-slate-400 truncate">Empresa atual: {bulkProgress.currentName}</p>
+                            </div>
+                        )}
                     </section>
 
                     {/* TABS DE AUTENTICAÇÃO */}

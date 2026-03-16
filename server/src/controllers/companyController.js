@@ -64,11 +64,11 @@ exports.listLocalCertificates = async (req, res) => {
 
 exports.createCompany = async (req, res) => {
     try {
-        const { name, cnpj, password, localFilename } = req.body;
+        const { name, cnpj, password, localFilename, loginUser, loginPassword } = req.body;
         const certificateFile = req.file;
 
-        if (!name || !cnpj || !password || (!certificateFile && !localFilename)) {
-            return res.status(400).json({ error: 'Missing required fields or certificate' });
+        if (!name || !cnpj) {
+            return res.status(400).json({ error: 'Nome e CNPJ são obrigatórios.' });
         }
 
         let certificateBuffer;
@@ -89,19 +89,21 @@ exports.createCompany = async (req, res) => {
             fileExt = certificateFile.originalname.split('.').pop();
         }
 
-        // 1. Upload Certificate to Supabase Storage
-        const fileName = `${cnpj}.${fileExt}`;
-        const filePath = `${fileName}`;
+        let filePath = null;
+        if (certificateBuffer) {
+            const fileName = `${cnpj}.${fileExt}`;
+            filePath = fileName;
 
-        const { error: uploadError } = await supabase.storage
-            .from('certificates')
-            .upload(filePath, certificateBuffer, {
-                contentType: 'application/x-pkcs12',
-                upsert: true
-            });
+            const { error: uploadError } = await supabase.storage
+                .from('certificates')
+                .upload(filePath, certificateBuffer, {
+                    contentType: 'application/x-pkcs12',
+                    upsert: true
+                });
 
-        if (uploadError) {
-            throw new Error(`Certificate upload failed: ${uploadError.message}`);
+            if (uploadError) {
+                throw new Error(`Certificate upload failed: ${uploadError.message}`);
+            }
         }
 
         // 2. Insert Company into Database
@@ -111,9 +113,11 @@ exports.createCompany = async (req, res) => {
                 {
                     name,
                     cnpj,
-                    certificate_password: password,
-                    certificate_url: filePath,
-                    certificate_local_name: localFilename || null
+                    certificate_password: password || null,
+                    certificate_url: filePath || null,
+                    certificate_local_name: localFilename || null,
+                    login_user: loginUser || null,
+                    login_password: loginPassword || null
                 }
             ])
             .select()
@@ -310,5 +314,21 @@ exports.fetchNotes = async (req, res) => {
         }
 
         res.status(500).json({ error: errorMsg });
+    }
+};
+
+exports.deleteCompany = async (req, res) => {
+    const { id } = req.params;
+    try {
+        const { error } = await supabase
+            .from('companies')
+            .delete()
+            .eq('id', id);
+
+        if (error) throw error;
+        res.json({ message: 'Empresa excluída com sucesso' });
+    } catch (error) {
+        console.error('Delete Company Error:', error);
+        res.status(500).json({ error: error.message });
     }
 };

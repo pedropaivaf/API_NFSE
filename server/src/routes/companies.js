@@ -41,4 +41,7 @@ router.get('/:id/download-zip', nfsController.downloadZippedNfse);
 // DELETE /companies/:id/nfs - Reset all notes for a company
 router.delete('/:id/nfs', nfsController.resetCompanyNfs);
 
+// DELETE /companies/:id - Delete a company
+router.delete('/:id', companyController.deleteCompany);
+
 module.exports = router;

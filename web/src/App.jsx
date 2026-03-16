@@ -7,6 +7,7 @@ import BuscarNota from './pages/BuscarNota';
 import NfseList from './pages/NfseList';
 import Settings from './pages/Settings';
 import Users from './pages/Users';
+import Companies from './pages/Companies';
 import Layout from './components/Layout';
 
 function App() {
@@ -18,6 +19,7 @@ function App() {
           <Route path="/dashboard" element={<Layout />}>
             <Route index element={<DashboardHome />} />
             <Route path="buscar-nota" element={<BuscarNota />} />
+            <Route path="companies" element={<Companies />} />
             <Route path="nfs" element={<NfseList />} />
             <Route path="users" element={<Users />} />
             <Route path="settings" element={<Settings />} />
