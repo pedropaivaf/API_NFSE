@@ -225,10 +225,21 @@ export default function NfseList() {
                                                         </thead>
                                                         <tbody className="divide-y divide-slate-50">
                                                             {comp.notes.map((note) => (
-                                                                <tr key={note.id} className="hover:bg-slate-50/30 transition">
+                                                                <tr key={note.id} className={`hover:bg-slate-50/30 transition ${(note.is_out_of_period || note.competence_mismatch) ? 'bg-amber-50/50' : ''}`}>
                                                                     <td className="px-6 py-2 font-mono text-[10px] text-slate-500">
-                                                                        <span className="text-slate-900 font-medium">#{note.access_key.substring(0, 6)}</span>
-                                                                        {note.access_key.substring(6, 30)}...
+                                                                        <div className="flex items-center gap-2">
+                                                                            <span className="text-slate-900 font-medium">#{note.access_key.substring(0, 6)}</span>
+                                                                            {note.access_key.substring(6, 30)}...
+                                                                            {(note.is_out_of_period || note.competence_mismatch) && (
+                                                                                <div className="group relative">
+                                                                                    <AlertCircle size={14} className="text-amber-500 cursor-help" />
+                                                                                    <div className="absolute left-full ml-2 w-48 p-2 bg-slate-800 text-white text-[10px] rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
+                                                                                        {note.is_out_of_period && "⚠️ Emitida fora do período solicitado. "}
+                                                                                        {note.competence_mismatch && "⚠️ Mês da competência difere da emissão."}
+                                                                                    </div>
+                                                                                </div>
+                                                                            )}
+                                                                        </div>
                                                                     </td>
                                                                     <td className="px-6 py-2 text-slate-600">
                                                                         {new Date(note.issue_date).toLocaleDateString()}

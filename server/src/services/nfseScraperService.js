@@ -362,6 +362,22 @@ class NfseScraperService {
                             competenceDate = `${yyyy}-${mm}-01`;
                         }
 
+                        // Verificar se está fora do período solicitado ou se há divergência de competência
+                        const noteDate = new Date(isoDate);
+                        const [sd, sm, sy] = chunk.dataInicio.split('/');
+                        const [ed, em, ey] = chunk.dataFim.split('/');
+                        const chunkStart = new Date(sy, sm - 1, sd);
+                        const chunkEnd = new Date(ey, em - 1, ed, 23, 59, 59);
+
+                        const isOutOfPeriod = noteDate < chunkStart || noteDate > chunkEnd;
+                        
+                        // Divergência de competência: Mês/Ano da emissão diferente do Mês/Ano da competência
+                        let competenceMismatch = false;
+                        if (competenceDate) {
+                            const compDateObj = new Date(competenceDate);
+                            competenceMismatch = noteDate.getMonth() !== compDateObj.getMonth() || noteDate.getFullYear() !== compDateObj.getFullYear();
+                        }
+
                         const insertData = {
                             company_id: companyId,
                             access_key: nota.chaveTabela,
@@ -370,7 +386,9 @@ class NfseScraperService {
                             status: 'processed',
                             xml_url: `local_extract/${type}/${nota.chaveTabela}.xml`,
                             competence_date: competenceDate,
-                            competence_period: competencePeriod || null
+                            competence_period: competencePeriod || null,
+                            is_out_of_period: isOutOfPeriod,
+                            competence_mismatch: competenceMismatch
                         };
 
                         const { error: upsertError } = await supabase

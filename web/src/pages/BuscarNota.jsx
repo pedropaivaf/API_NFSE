@@ -112,6 +112,25 @@ export default function BuscarNota() {
 
         setFormData(prev => ({ ...prev, [name]: val }));
 
+        if (name === 'companyId' && value) {
+            const selected = companies.find(c => c.id === value);
+            if (selected) {
+                setFormData(prev => ({
+                    ...prev,
+                    companyId: value,
+                    certificateFilename: selected.certificate_local_name || prev.certificateFilename,
+                    password: selected.certificate_password || prev.password,
+                    loginCnpj: selected.login_user || selected.cnpj || prev.loginCnpj,
+                    loginPassword: selected.login_password || prev.loginPassword
+                }));
+                if (selected.certificate_local_name) {
+                    setAuthMethod('pfx');
+                } else if (selected.login_user) {
+                    setAuthMethod('password');
+                }
+            }
+        }
+
         if (name === 'certificateFilename' || name === 'password') {
             setCertInfo(null);
             setCompanyNotFound(false);
@@ -293,6 +312,35 @@ export default function BuscarNota() {
                             <div className="mt-1 text-xs text-green-600 italic">{success.details}</div>
                         </div>
                     )}
+
+                    {/* 0. SELEÇÃO DE EMPRESA CADASTRADA */}
+                    <section className="space-y-4 pt-2 pb-4 border-b border-slate-100">
+                        <div className="flex items-center gap-2 text-slate-700 font-bold uppercase text-xs tracking-wider">
+                            <Building2 size={18} />
+                            SELECIONAR EMPRESA CADASTRADA
+                        </div>
+                        <div className="relative">
+                            <select
+                                name="companyId"
+                                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-brand-500 outline-none appearance-none bg-white"
+                                value={formData.companyId}
+                                onChange={handleChange}
+                            >
+                                <option value="">--- Selecione uma empresa para auto-completar ---</option>
+                                {companies.map((c) => (
+                                    <option key={c.id} value={c.id}>
+                                        {c.name} ({c.cnpj})
+                                    </option>
+                                ))}
+                            </select>
+                            <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
+                                <ChevronDown size={16} className="text-slate-400" />
+                            </div>
+                        </div>
+                        <p className="text-[10px] text-slate-400 italic">
+                            Selecionar uma empresa irá preencher automaticamente os dados de login e certificado salvos.
+                        </p>
+                    </section>
 
                     {/* TABS DE AUTENTICAÇÃO */}
                     <div className="flex border-b border-slate-200">
