@@ -1,7 +1,7 @@
 
 import { useEffect } from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, Search, Settings, FileText, LogOut, Users } from 'lucide-react';
+import { LayoutDashboard, Search, Settings, FileText, LogOut, Users, Building2 } from 'lucide-react';
 import logo from '../assets/logo.png';
 import packageJson from '../../package.json';
 
