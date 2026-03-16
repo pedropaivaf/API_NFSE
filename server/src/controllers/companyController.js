@@ -332,3 +332,32 @@ exports.deleteCompany = async (req, res) => {
         res.status(500).json({ error: error.message });
     }
 };
+
+exports.updateCompany = async (req, res) => {
+    const { id } = req.params;
+    const { name, cnpj, loginUser, loginPassword, password, localFilename } = req.body;
+    
+    try {
+        const updateData = {
+            name,
+            cnpj,
+            login_user: loginUser || null,
+            login_password: loginPassword || null,
+            certificate_password: password || null,
+            certificate_local_name: localFilename || null
+        };
+
+        const { data, error } = await supabase
+            .from('companies')
+            .update(updateData)
+            .eq('id', id)
+            .select()
+            .single();
+
+        if (error) throw error;
+        res.json(data);
+    } catch (error) {
+        console.error('Update Company Error:', error);
+        res.status(500).json({ error: error.message });
+    }
+};

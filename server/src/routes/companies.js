@@ -44,4 +44,7 @@ router.delete('/:id/nfs', nfsController.resetCompanyNfs);
 // DELETE /companies/:id - Delete a company
 router.delete('/:id', companyController.deleteCompany);
 
+// PUT /companies/:id - Update a company
+router.put('/:id', companyController.updateCompany);
+
 module.exports = router;
