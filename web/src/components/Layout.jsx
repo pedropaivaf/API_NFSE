@@ -26,8 +26,8 @@ export default function Layout() {
             {/* Sidebar */}
             <aside className="w-64 bg-slate-900 text-white flex flex-col">
                 <div className="p-6 border-b border-slate-800 flex items-center gap-3">
-                    <div className="rounded-full overflow-hidden border border-slate-700 shadow-sm bg-slate-800">
-                        <img src={logo} alt="Logo" className="w-10 h-10 object-cover rounded-full" />
+                    <div className="rounded-md overflow-hidden border border-slate-700 shadow-sm bg-slate-800">
+                        <img src={logo} alt="Logo" className="w-10 h-10 object-cover" />
                     </div>
                     <h2 className="text-xl font-bold tracking-tight uppercase">API NFSe</h2>
                 </div>
