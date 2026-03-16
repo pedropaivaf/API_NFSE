@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { KeyRound, Loader2, AlertCircle } from 'lucide-react';
+import logo from '../assets/logo.png';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
@@ -60,7 +61,7 @@ export default function Login() {
             <div className="w-full max-w-md p-8 bg-white rounded-2xl shadow-xl border border-brand-100">
                 <div className="flex flex-col items-center mb-8">
                     <div className="bg-transparent mb-4">
-                        <img src="/logo.png" alt="API NFSe Logo" className="w-16 h-16 object-contain" />
+                        <img src={logo} alt="API NFSe Logo" className="w-16 h-16 object-contain" />
                     </div>
                     <h1 className="text-2xl font-bold text-slate-900">Licença de Acesso</h1>
                     <p className="text-slate-500 text-center mt-1">Insira a sua chave de ativação para acessar o sistema.</p>

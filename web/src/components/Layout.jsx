@@ -2,6 +2,7 @@
 import { useEffect } from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { LayoutDashboard, Search, Settings, FileText, LogOut, Users } from 'lucide-react';
+import logo from '../assets/logo.png';
 import packageJson from '../../package.json';
 
 export default function Layout() {
@@ -25,7 +26,7 @@ export default function Layout() {
             {/* Sidebar */}
             <aside className="w-64 bg-slate-900 text-white flex flex-col">
                 <div className="p-6 border-b border-slate-800 flex items-center gap-3">
-                    <img src="/logo.png" alt="Logo" className="w-8 h-8 object-contain" />
+                    <img src={logo} alt="Logo" className="w-8 h-8 object-contain" />
                     <h2 className="text-xl font-bold tracking-tight uppercase">API NFSe</h2>
                 </div>
 
