@@ -59,8 +59,8 @@ export default function Login() {
         <div className="flex items-center justify-center min-h-screen bg-brand-50">
             <div className="w-full max-w-md p-8 bg-white rounded-2xl shadow-xl border border-brand-100">
                 <div className="flex flex-col items-center mb-8">
-                    <div className="bg-brand-100 p-4 rounded-full mb-4">
-                        <KeyRound className="w-8 h-8 text-brand-600" />
+                    <div className="bg-transparent mb-4">
+                        <img src="/logo.png" alt="API NFSe Logo" className="w-16 h-16 object-contain" />
                     </div>
                     <h1 className="text-2xl font-bold text-slate-900">Licença de Acesso</h1>
                     <p className="text-slate-500 text-center mt-1">Insira a sua chave de ativação para acessar o sistema.</p>

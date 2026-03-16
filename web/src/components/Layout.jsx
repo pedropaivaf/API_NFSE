@@ -24,8 +24,9 @@ export default function Layout() {
         <div className="flex h-screen bg-slate-50">
             {/* Sidebar */}
             <aside className="w-64 bg-slate-900 text-white flex flex-col">
-                <div className="p-6 border-b border-slate-800">
-                    <h2 className="text-xl font-bold tracking-tight">API NFSe</h2>
+                <div className="p-6 border-b border-slate-800 flex items-center gap-3">
+                    <img src="/logo.png" alt="Logo" className="w-8 h-8 object-contain" />
+                    <h2 className="text-xl font-bold tracking-tight uppercase">API NFSe</h2>
                 </div>
 
                 <nav className="flex-1 p-4 space-y-2">
