@@ -5,6 +5,9 @@ import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
+// ⚡ Bolt: Extract formatter to prevent re-instantiation on every render
+const currencyFormatter = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
+
 export default function DashboardHome() {
     const [period, setPeriod] = useState('week'); // 'week' | 'month'
     const [chartMode, setChartMode] = useState('volume'); // 'volume' | 'quality'
@@ -21,7 +24,7 @@ export default function DashboardHome() {
     const currentData = stats ? (period === 'week' ? stats.seriesWeek : stats.seriesMonth) : [];
 
     const totalAmount = stats
-        ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(stats.totalAmount)
+        ? currencyFormatter.format(stats.totalAmount)
         : 'R$ 0,00';
 
     return (
@@ -168,7 +171,7 @@ export default function DashboardHome() {
                                 <Tooltip
                                     cursor={{ fill: '#f1f5f9' }}
                                     contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
-                                    formatter={(value) => [new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value), 'Receita']}
+                                    formatter={(value) => [currencyFormatter.format(value), 'Receita']}
                                 />
                                 <Bar
                                     dataKey="valor"
