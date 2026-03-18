@@ -116,7 +116,7 @@ function createWindow() {
                 'Content-Security-Policy': [
                     isDev
                         ? "default-src 'self' 'unsafe-inline' 'unsafe-eval' http://localhost:* ws://localhost:*; connect-src 'self' http://localhost:* ws://localhost:* https://*;"
-                        : "default-src 'self' 'unsafe-inline'; connect-src 'self' https://*;"
+                        : "default-src 'self' 'unsafe-inline'; connect-src 'self' http://localhost:* https://*;"
                 ]
             }
         });
