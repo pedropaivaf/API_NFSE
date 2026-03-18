@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
 const path = require('path');
 const { fork } = require('child_process');
 const fs = require('fs');
@@ -28,7 +28,9 @@ function waitForBackend(port, timeoutMs = 30000) {
     });
 }
 
-const isDev = !app.isPackaged;
+// process.defaultApp é true quando rodando com `electron .` (modo dev)
+// Evita chamar app.isPackaged no top-level, que falha no electron 28 com "type":"module"
+const isDev = Boolean(process.defaultApp) || process.env.NODE_ENV === 'development';
 
 let serverProcess;
 
@@ -99,11 +101,25 @@ function createWindow() {
         webPreferences: {
             nodeIntegration: false,
             contextIsolation: true,
-            webSecurity: false,
+            webSecurity: true,
             preload: path.join(__dirname, 'preload.js')
         },
         autoHideMenuBar: true,
         title: 'API NFSe - Busca de Notas Fiscais e Conversão (XML)',
+    });
+
+    // Set CSP header to suppress insecure-CSP warnings
+    win.webContents.session.webRequest.onHeadersReceived((details, callback) => {
+        callback({
+            responseHeaders: {
+                ...details.responseHeaders,
+                'Content-Security-Policy': [
+                    isDev
+                        ? "default-src 'self' 'unsafe-inline' 'unsafe-eval' http://localhost:* ws://localhost:*; connect-src 'self' http://localhost:* ws://localhost:* https://*;"
+                        : "default-src 'self' 'unsafe-inline'; connect-src 'self' https://*;"
+                ]
+            }
+        });
     });
 
     // ---> FORÇA A JANELA A ABRIR MAXIMIZADA (TELA CHEIA) <---
@@ -134,6 +150,26 @@ ipcMain.handle('get-local-certificates', async () => {
         return { path: certDir, files };
     } catch (error) {
         return { path: certDir, files: [], error: error.message };
+    }
+});
+
+ipcMain.handle('open-explorer', async (event, filePath) => {
+    if (!filePath) return;
+    try {
+        const absolutePath = path.isAbsolute(filePath)
+            ? filePath
+            : path.join(os.homedir(), 'Documents', filePath);
+
+        if (fs.existsSync(absolutePath)) {
+            shell.showItemInFolder(absolutePath);
+            return { success: true };
+        } else {
+            console.error('[Electron] Open explorer failed: File not found at', absolutePath);
+            return { success: false, error: 'Arquivo não encontrado no caminho especificado.' };
+        }
+    } catch (err) {
+        console.error('[Electron] Open explorer error:', err.message);
+        return { success: false, error: err.message };
     }
 });
 

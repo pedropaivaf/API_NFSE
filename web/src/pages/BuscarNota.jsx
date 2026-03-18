@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import { Search, Loader2, AlertCircle, Building2, HardDrive, ShieldCheck, Calendar, CheckCircle, PlusCircle, FileCode, ChevronDown } from 'lucide-react';
 
@@ -37,6 +37,7 @@ export default function BuscarNota() {
     });
     const [isBulkSync, setIsBulkSync] = useState(false);
     const [bulkProgress, setBulkProgress] = useState({ total: 0, current: 0, currentName: '' });
+    const [bulkResults, setBulkResults] = useState(null);
 
     const fetchCompanies = async () => {
         setLoadingCompanies(true);
@@ -79,6 +80,9 @@ export default function BuscarNota() {
         fetchFiles();
     }, []);
 
+    const logContainerRef = useRef(null);
+    const logSectionRef = useRef(null);
+
     const [saveCredentials, setSaveCredentials] = useState(() => {
         const saved = localStorage.getItem('saveUserPassword');
         return saved !== null ? JSON.parse(saved) : true;
@@ -90,6 +94,13 @@ export default function BuscarNota() {
 
     const [logs, setLogs] = useState([]);
     const [showLogs, setShowLogs] = useState(false);
+
+    // Auto-scroll log container to bottom on new logs
+    useEffect(() => {
+        if (logContainerRef.current) {
+            logContainerRef.current.scrollTop = logContainerRef.current.scrollHeight;
+        }
+    }, [logs]);
 
     useEffect(() => {
         let eventSource;
@@ -246,6 +257,12 @@ export default function BuscarNota() {
         setLoadingExtrair(true);
         setLogs([]);
         setShowLogs(true);
+        // Auto-scroll page to the log terminal section
+        setTimeout(() => {
+            if (logSectionRef.current) {
+                logSectionRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+        }, 100);
 
         try {
             // Se for password e estiver marcado para salvar
@@ -271,49 +288,39 @@ export default function BuscarNota() {
     };
 
     const handleBulkSync = async () => {
-        if (!confirm(`Deseja iniciar a sincronização de ${companies.length} empresas para o mês ${formData.syncMonth}?`)) return;
+        if (!confirm(`Deseja iniciar a sincronização de ${companies.length} empresa(s) para o mês ${formData.syncMonth}?`)) return;
 
         setLoadingExtrair(true);
         setIsBulkSync(true);
-        setBulkProgress({ total: companies.length, current: 0, currentName: '' });
+        setBulkProgress({ total: companies.length, current: 0, currentName: 'Aguardando servidor...' });
         setError(null);
         setSuccess(null);
+        setBulkResults(null);
         setLogs([]);
         setShowLogs(true);
 
-        const [year, month] = formData.syncMonth.split('-');
-        const startDate = `01/${month}/${year}`;
-        const lastDay = new Date(year, month, 0).getDate();
-        const endDate = `${lastDay}/${month}/${year}`;
+        try {
+            const res = await axios.post(`${API_URL}/scraper/bulk-sync`, {
+                month: formData.syncMonth,
+                type: formData.type,
+            }, { timeout: 0 });
 
-        for (let i = 0; i < companies.length; i++) {
-            const company = companies[i];
-            setBulkProgress(prev => ({ ...prev, current: i + 1, currentName: company.name }));
-            
-            try {
-                const payload = {
-                    companyId: company.id,
-                    type: formData.type,
-                    period: 'custom',
-                    startDate: startDate,
-                    endDate: endDate,
-                    method: (company.certificate_local_name || company.certificate_url) ? 'pfx' : 'password',
-                    certificateFilename: company.certificate_local_name,
-                    password: company.certificate_password,
-                    loginCnpj: company.login_user || company.cnpj,
-                    loginPassword: company.login_password
-                };
-
-                await axios.post(`${API_URL}/scraper/fetch-gov`, payload);
-            } catch (err) {
-                console.error(`Erro na empresa ${company.name}:`, err);
-                // Continue with next company
-            }
+            const { total, totalSaved, totalErrors, results } = res.data;
+            setBulkProgress({ total, current: total, currentName: 'Concluído' });
+            setBulkResults(results || []);
+            setSuccess({
+                message: `Lote concluído! ${total} empresa(s) | ${totalSaved} nota(s) salva(s)${totalErrors > 0 ? ` | ${totalErrors} erro(s)` : ''}`,
+                count: totalSaved,
+                found: totalSaved,
+                skipped: 0,
+            });
+        } catch (err) {
+            console.error('Bulk sync error:', err);
+            setError(err.response?.data?.error || 'Erro na sincronização em lote.');
+        } finally {
+            setLoadingExtrair(false);
+            setIsBulkSync(false);
         }
-
-        setSuccess({ message: "Sincronização em lote concluída!", count: companies.length });
-        setLoadingExtrair(false);
-        setIsBulkSync(false);
     };
 
     return (
@@ -351,16 +358,58 @@ export default function BuscarNota() {
                     )}
 
                     {success && (
-                        <div className="p-4 bg-green-50 text-green-700 text-sm rounded-lg border border-green-100">
-                            <div className="font-bold text-lg flex items-center gap-2 mb-1">
-                                <CheckCircle className="text-green-600" size={24} />
-                                Extração RPA concluída!
+                        <div className={`p-5 rounded-xl border-2 ${success.errors > 0 ? 'bg-amber-50 border-amber-200' : 'bg-green-50 border-green-200'}`}>
+                            <div className="font-bold text-lg flex items-center gap-2 mb-3 text-slate-800">
+                                <CheckCircle className={success.count > 0 ? 'text-green-600' : 'text-amber-500'} size={24} />
+                                {success.count > 0 ? 'Extração concluída com sucesso!' : 'Extração concluída'}
                             </div>
-                            <p>{success.message}</p>
-                            <p className="mt-2 text-green-800 font-medium">{success.count || 0} notas foram salvas com sucesso no banco de dados.</p>
-                            <div className="mt-1 text-xs text-green-600 italic">{success.details}</div>
+                            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                                <div className="bg-white rounded-lg p-3 border border-slate-100 text-center">
+                                    <div className="text-2xl font-black text-slate-800">{success.found ?? success.count ?? 0}</div>
+                                    <div className="text-xs font-semibold text-slate-500 mt-0.5">📄 Encontradas</div>
+                                </div>
+                                <div className="bg-white rounded-lg p-3 border border-green-100 text-center">
+                                    <div className="text-2xl font-black text-green-700">{success.count ?? 0}</div>
+                                    <div className="text-xs font-semibold text-slate-500 mt-0.5">💾 Novas Salvas</div>
+                                </div>
+                                <div className="bg-white rounded-lg p-3 border border-slate-100 text-center">
+                                    <div className="text-2xl font-black text-slate-500">{success.skipped ?? 0}</div>
+                                    <div className="text-xs font-semibold text-slate-500 mt-0.5">⏭️ Duplicadas</div>
+                                </div>
+                                {(success.retained ?? 0) > 0 && (
+                                    <div className="bg-amber-50 rounded-lg p-3 border border-amber-100 text-center">
+                                        <div className="text-2xl font-black text-amber-600">{success.retained}</div>
+                                        <div className="text-xs font-semibold text-amber-700 mt-0.5">📌 Retidas</div>
+                                    </div>
+                                )}
+                                {(success.mismatch ?? 0) > 0 && (
+                                    <div className="bg-purple-50 rounded-lg p-3 border border-purple-100 text-center">
+                                        <div className="text-2xl font-black text-purple-600">{success.mismatch}</div>
+                                        <div className="text-xs font-semibold text-purple-700 mt-0.5">⚠️ Compet. Divergente</div>
+                                    </div>
+                                )}
+                                {(success.retroactive ?? 0) > 0 && (
+                                    <div className="bg-blue-50 rounded-lg p-3 border border-blue-100 text-center">
+                                        <div className="text-2xl font-black text-blue-600">{success.retroactive}</div>
+                                        <div className="text-xs font-semibold text-blue-700 mt-0.5">🕒 Retroativas</div>
+                                    </div>
+                                )}
+                                {(success.errors ?? 0) > 0 && (
+                                    <div className="bg-red-50 rounded-lg p-3 border border-red-100 text-center">
+                                        <div className="text-2xl font-black text-red-600">{success.errors}</div>
+                                        <div className="text-xs font-semibold text-red-700 mt-0.5">❌ Erros</div>
+                                    </div>
+                                )}
+                            </div>
+                            {success.message && (
+                                <p className="mt-3 text-sm font-medium text-slate-600">{success.message}</p>
+                            )}
+                            {success.details && (
+                                <p className="mt-1 text-xs text-slate-400 font-mono">{success.details}</p>
+                            )}
                         </div>
                     )}
+
 
                     {/* 0. SELEÇÃO DE EMPRESA CADASTRADA */}
                     <section className="space-y-4 pt-2 pb-4 border-b border-slate-100">
@@ -421,12 +470,48 @@ export default function BuscarNota() {
                                     <span>{bulkProgress.current} / {bulkProgress.total}</span>
                                 </div>
                                 <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
-                                    <div 
-                                        className="h-full bg-brand-500 transition-all duration-500" 
+                                    <div
+                                        className="h-full bg-brand-500 transition-all duration-500"
                                         style={{ width: `${(bulkProgress.current / bulkProgress.total) * 100}%` }}
                                     ></div>
                                 </div>
                                 <p className="text-[10px] text-slate-400 truncate">Empresa atual: {bulkProgress.currentName}</p>
+                            </div>
+                        )}
+
+                        {bulkResults && bulkResults.length > 0 && (
+                            <div className="mt-4 bg-white rounded-xl border border-slate-200 overflow-hidden">
+                                <div className="px-4 py-2 bg-slate-50 border-b border-slate-200">
+                                    <span className="text-xs font-bold text-slate-700 uppercase">Resultado por Empresa</span>
+                                </div>
+                                <div className="overflow-x-auto">
+                                    <table className="w-full text-xs">
+                                        <thead>
+                                            <tr className="text-slate-500 font-semibold border-b border-slate-100">
+                                                <th className="px-4 py-2 text-left">Empresa</th>
+                                                <th className="px-4 py-2 text-center">Status</th>
+                                                <th className="px-4 py-2 text-right">Notas Salvas</th>
+                                                <th className="px-4 py-2 text-right">Encontradas</th>
+                                                <th className="px-4 py-2 text-left">Detalhe</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-slate-50">
+                                            {bulkResults.map((r, i) => (
+                                                <tr key={i} className={r.success ? '' : 'bg-red-50/50'}>
+                                                    <td className="px-4 py-2 font-medium text-slate-800">{r.company}</td>
+                                                    <td className="px-4 py-2 text-center">
+                                                        <span className={`inline-flex px-2 py-0.5 rounded-full text-[9px] uppercase font-bold ${r.success ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                                                            {r.success ? 'OK' : 'Erro'}
+                                                        </span>
+                                                    </td>
+                                                    <td className="px-4 py-2 text-right font-bold text-slate-800">{r.count ?? '-'}</td>
+                                                    <td className="px-4 py-2 text-right text-slate-500">{r.found ?? '-'}</td>
+                                                    <td className="px-4 py-2 text-slate-500 truncate max-w-[200px]">{r.error || r.details || '-'}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
                             </div>
                         )}
                     </section>
@@ -669,7 +754,7 @@ export default function BuscarNota() {
             </div>
 
             {showLogs && (
-                <div className="bg-slate-900 rounded-xl shadow-2xl overflow-hidden border border-slate-800">
+                <div ref={logSectionRef} className="bg-slate-900 rounded-xl shadow-2xl overflow-hidden border border-slate-800">
                     <div className="px-4 py-2 bg-slate-800 border-b border-slate-700 flex items-center justify-between">
                         <div className="flex items-center gap-2">
                             <div className="flex gap-1.5">
@@ -681,7 +766,7 @@ export default function BuscarNota() {
                         </div>
                         <span className="text-[10px] font-mono text-slate-500 uppercase">Filtro: {formData.period === 'custom' ? `${formData.startDate} - ${formData.endDate}` : formData.period}</span>
                     </div>
-                    <div className="p-4 h-64 overflow-y-auto font-mono text-[11px] space-y-1 bg-black/40 scrollbar-thin">
+                    <div ref={logContainerRef} className="p-4 h-64 overflow-y-auto font-mono text-[11px] space-y-1 bg-black/40 scrollbar-thin">
                         {logs.length === 0 && <div className="text-slate-600 italic">Aguardando início do processo...</div>}
                         {logs.map((l, i) => (
                             <div key={i} className="flex gap-2 whitespace-pre-wrap">

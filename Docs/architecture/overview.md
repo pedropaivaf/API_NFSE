@@ -1,6 +1,6 @@
 # Arquitetura do Projeto — API NFSe
 
-**Versão atual:** v0.2.2
+**Versão atual:** v0.5.0
 
 ## Visão Geral
 
@@ -80,7 +80,7 @@ API_NFSE/
                                     Authorization: Bearer {JWT}
                             └─► Parse HTML/JSON com Cheerio
                             └─► Upsert metadados → Supabase tabela `nfs`
-                            └─► Download XMLs → ~/Documents/notas_processadas/
+                            └─► Download XMLs → [OutputPath]/[Empresa]/[tipo]/[mês]/
 ```
 
 ## Tabelas do Banco de Dados (Supabase)
@@ -101,8 +101,13 @@ API_NFSE/
 | POST   | `/companies/quick`                | Cadastro rápido (auto-vinculo)     |
 | POST   | `/companies/:id/credentials`      | Salva credenciais usuário/senha    |
 | GET    | `/companies/local-certificates`   | Lista .pfx do drive local          |
+| GET    | `/companies/grouped-nfs`          | Notas agrupadas por empresa/mês    |
+| GET    | `/companies/:id/download-zip`     | Download ZIP das notas             |
 | POST   | `/scraper/validate-cert`          | Valida .pfx ou credenciais login   |
 | POST   | `/scraper/fetch-gov`              | Executa extração RPA               |
+| POST   | `/scraper/bulk-sync`              | Sincronização em lote (mensal)     |
+| GET    | `/api/settings`                   | Configurações globais              |
+| POST   | `/api/settings`                   | Atualizar configurações            |
 
 ## Convenção de Período
 

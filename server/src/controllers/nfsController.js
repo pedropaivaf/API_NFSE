@@ -4,7 +4,15 @@ const fs = require('fs');
 const { createClient } = require('@supabase/supabase-js');
 require('dotenv').config();
 
+const os = require('os');
+
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_ANON_KEY);
+
+const DEFAULT_OUTPUT_PATH = path.join(os.homedir(), 'Documents', "XML's");
+
+function _getOutputPath(settingsMap, company) {
+    return company?.custom_output_path || settingsMap.output_path || DEFAULT_OUTPUT_PATH;
+}
 
 exports.downloadZippedNfse = async (req, res) => {
     const { id } = req.params; // companyId
@@ -14,7 +22,7 @@ exports.downloadZippedNfse = async (req, res) => {
         // 1. Get NFSe data from Supabase for this company
         let query = supabase
             .from('nfs')
-            .select('*, companies(name, cnpj)')
+            .select('*, companies(name, cnpj, custom_output_path)')
             .eq('company_id', id);
 
         if (period) {
@@ -35,15 +43,13 @@ exports.downloadZippedNfse = async (req, res) => {
             return acc;
         }, {});
 
-        const baseDir = settingsMap.output_path || path.join(process.env.USERPROFILE, 'Documents', 'notas_processadas');
+        const baseDir = _getOutputPath(settingsMap, nfs[0].companies);
 
         const companyName = nfs[0].companies?.name || 'Empresa';
         const zip = new AdmZip();
 
         let addedFiles = 0;
         for (const nota of nfs) {
-            // O campo xml_url no banco está como "local_extract/recebidas/CHAVE.xml"
-            // Vamos traduzir isso para o caminho real no disco
             if (!nota.xml_url) continue;
 
             const relativePath = nota.xml_url.replace('local_extract/', '');
@@ -147,13 +153,20 @@ exports.getDashboardStats = async (req, res) => {
 
 exports.getGroupedNfs = async (req, res) => {
     try {
-        // Fetch all NFs with company info
+        // Fetch all NFs with company info (including custom_output_path)
         const { data, error } = await supabase
             .from('nfs')
-            .select('*, companies(id, name, cnpj)')
+            .select('*, companies(id, name, cnpj, custom_output_path)')
             .order('issue_date', { ascending: false });
 
         if (error) throw error;
+
+        // Fetch global settings for output_path
+        const { data: dbSettings } = await supabase.from('app_settings').select('*');
+        const settingsMap = (dbSettings || []).reduce((acc, curr) => {
+            acc[curr.key] = curr.value;
+            return acc;
+        }, {});
 
         // Group by company then by competence
         const grouped = data.reduce((acc, note) => {
@@ -163,7 +176,8 @@ exports.getGroupedNfs = async (req, res) => {
                     id: companyId,
                     name: note.companies.name,
                     cnpj: note.companies.cnpj,
-                    competences: {} // Grouping by month
+                    base_output_path: _getOutputPath(settingsMap, note.companies),
+                    competences: {}
                 };
             }
 
@@ -188,7 +202,6 @@ exports.getGroupedNfs = async (req, res) => {
         const result = Object.values(grouped).map(company => ({
             ...company,
             competences: Object.values(company.competences).sort((a, b) => {
-                // Sort by MM/YYYY descending
                 if (a.period === 'Sem Competência') return 1;
                 if (b.period === 'Sem Competência') return -1;
                 const [ma, ya] = a.period.split('/');

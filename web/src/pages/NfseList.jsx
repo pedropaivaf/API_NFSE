@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import axios from 'axios';
 import {
     FileText, Search, Loader2, Download, AlertCircle, ChevronDown, ChevronRight,
-    Building2, Archive, ExternalLink, Calendar, Trash2
+    Building2, Archive, ExternalLink, Calendar, Trash2, FolderOpen, Filter
 } from 'lucide-react';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
@@ -13,22 +13,24 @@ export default function NfseList() {
     const [error, setError] = useState(null);
     const [searchTerm, setSearchTerm] = useState('');
     const [expandedCompanies, setExpandedCompanies] = useState({});
-
     const [expandedCompetences, setExpandedCompetences] = useState({});
- 
-    // Fetch grouped NFs
+    const [resetMsg, setResetMsg] = useState({ id: null, text: '' });
+
+    // Filters
+    const [filterCompany, setFilterCompany] = useState('all');
+    const [filterStatus, setFilterStatus] = useState('all');
+
     useEffect(() => {
         fetchData();
     }, []);
- 
+
     const fetchData = async () => {
         setLoading(true);
         setError(null);
         try {
             const res = await axios.get(`${API_URL}/companies/grouped-nfs`);
             setGroupedNfs(res.data);
- 
-            // Auto-expand the first company and its first month if exists
+
             if (res.data.length > 0) {
                 const firstCompanyId = res.data[0].id;
                 setExpandedCompanies({ [firstCompanyId]: true });
@@ -43,7 +45,7 @@ export default function NfseList() {
             setLoading(false);
         }
     };
- 
+
     const toggleCompany = (id) => {
         setExpandedCompanies(prev => ({ ...prev, [id]: !prev[id] }));
     };
@@ -52,16 +54,13 @@ export default function NfseList() {
         const key = `${companyId}-${period}`;
         setExpandedCompetences(prev => ({ ...prev, [key]: !prev[key] }));
     };
- 
+
     const handleDownloadZip = (companyId, companyName, period = null) => {
         let downloadUrl = `${API_URL}/companies/${companyId}/download-zip`;
         if (period) {
             downloadUrl += `?period=${encodeURIComponent(period)}`;
         }
-
         const fileName = period ? `${companyName}_${period.replace('/', '_')}_notas.zip` : `${companyName}_notas.zip`;
-
-        // Use hidden link instead of window.open to avoid spawning blank windows in Electron
         const link = document.createElement('a');
         link.href = downloadUrl;
         link.setAttribute('download', fileName);
@@ -69,31 +68,100 @@ export default function NfseList() {
         link.click();
         document.body.removeChild(link);
     };
- 
+
     const handleReset = async (companyId, companyName) => {
         if (!window.confirm(`Resetar todas as notas de "${companyName}"?\nEsta ação não pode ser desfeita.`)) return;
         try {
             await axios.delete(`${API_URL}/companies/${companyId}/nfs`);
+            setResetMsg({ id: companyId, text: 'Resetado com sucesso!' });
+            setTimeout(() => setResetMsg({ id: null, text: '' }), 3000);
             await fetchData();
         } catch (err) {
             console.error('Reset failed', err);
             alert('Erro ao resetar notas: ' + (err.response?.data?.error || err.message));
         }
     };
- 
-    const handleDownloadSingleXml = (xmlUrl) => {
-        alert(`Arquivo localizado em: ${xmlUrl}`);
+
+    const handleOpenXml = async (basePath, xmlUrl) => {
+        if (!xmlUrl) {
+            alert("URL do arquivo não disponível.");
+            return;
+        }
+
+        // Construct absolute path: basePath + xmlUrl
+        const fullPath = basePath ? `${basePath}\\${xmlUrl.replace(/\//g, '\\')}` : xmlUrl;
+
+        if (window.electronAPI?.openExplorer) {
+            const result = await window.electronAPI.openExplorer(fullPath);
+            if (result && !result.success) {
+                alert(result.error || "Erro ao abrir pasta do arquivo.");
+            }
+        } else {
+            alert(`Arquivo localizado em: ${fullPath}`);
+        }
     };
- 
-    const filteredGroups = groupedNfs.filter(group => {
-        const term = searchTerm.toLowerCase();
-        const matchesCompany = group.name.toLowerCase().includes(term) || group.cnpj.includes(term);
-        const matchesNote = group.competences.some(c => 
-            c.notes.some(n => n.access_key.toLowerCase().includes(term))
-        );
-        return matchesCompany || matchesNote;
-    });
- 
+
+    const handleOpenCompanyFolder = async (basePath, companyName) => {
+        if (!basePath) {
+            alert("Caminho de saída não configurado. Vá em Configurações para definir.");
+            return;
+        }
+
+        // Sanitize company name same way as backend
+        const safeName = companyName.replace(/[<>:"/\\|?*]/g, '').trim() || 'Empresa';
+        const folderPath = `${basePath}\\${safeName}`;
+
+        if (window.electronAPI?.openExplorer) {
+            const result = await window.electronAPI.openExplorer(folderPath);
+            if (result && !result.success) {
+                alert("Pasta da empresa não encontrada. Execute uma sincronização primeiro para criar as pastas.");
+            }
+        } else {
+            alert(`Pasta da empresa: ${folderPath}`);
+        }
+    };
+
+    // Apply all filters
+    const filteredGroups = groupedNfs
+        .filter(group => filterCompany === 'all' || group.id === filterCompany)
+        .filter(group => {
+            const term = searchTerm.toLowerCase();
+            if (!term) return true;
+            const matchesCompany = group.name.toLowerCase().includes(term) || group.cnpj.includes(term);
+            const matchesNote = group.competences.some(c =>
+                c.notes.some(n => n.access_key.toLowerCase().includes(term))
+            );
+            return matchesCompany || matchesNote;
+        })
+        .map(group => ({
+            ...group,
+            competences: group.competences
+                .map(comp => ({
+                    ...comp,
+                    notes: comp.notes.filter(note => {
+                        if (filterStatus === 'mismatch') return note.competence_mismatch;
+                        if (filterStatus === 'retroactive') return note.is_retroactive;
+                        if (filterStatus === 'out_of_period') return note.is_out_of_period;
+                        if (filterStatus === 'retained') return note.is_retained;
+                        return true;
+                    })
+                }))
+                .filter(comp => comp.notes.length > 0)
+        }))
+        .filter(group => group.competences.length > 0);
+
+    // Count flags across all data for badge display
+    const flagCounts = groupedNfs.reduce((acc, g) => {
+        g.competences.forEach(c => c.notes.forEach(n => {
+            if (n.competence_mismatch) acc.mismatch++;
+            if (n.is_retroactive) acc.retroactive++;
+            if (n.is_out_of_period) acc.out_of_period++;
+            if (n.is_retained) acc.retained++;
+            acc.total++;
+        }));
+        return acc;
+    }, { total: 0, mismatch: 0, retroactive: 0, out_of_period: 0, retained: 0 });
+
     return (
         <div className="space-y-6">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -104,7 +172,7 @@ export default function NfseList() {
                     </h2>
                     <p className="text-slate-500">Visualize e baixe os XMLs processados</p>
                 </div>
- 
+
                 <div className="relative">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
                     <input
@@ -116,14 +184,54 @@ export default function NfseList() {
                     />
                 </div>
             </div>
- 
+
+            {/* Filter Bar */}
+            <div className="flex flex-wrap items-center gap-3 p-3 bg-white rounded-xl border border-slate-200 shadow-sm">
+                <div className="flex items-center gap-2 text-xs font-bold text-slate-500 uppercase">
+                    <Filter size={14} />
+                    Filtros
+                </div>
+
+                <select
+                    className="px-3 py-1.5 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-brand-500 outline-none bg-white"
+                    value={filterCompany}
+                    onChange={(e) => setFilterCompany(e.target.value)}
+                >
+                    <option value="all">Todas Empresas</option>
+                    {groupedNfs.map(g => (
+                        <option key={g.id} value={g.id}>{g.name}</option>
+                    ))}
+                </select>
+
+                <select
+                    className="px-3 py-1.5 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-brand-500 outline-none bg-white"
+                    value={filterStatus}
+                    onChange={(e) => setFilterStatus(e.target.value)}
+                >
+                    <option value="all">Todos os Status ({flagCounts.total})</option>
+                    <option value="mismatch">Competência Divergente ({flagCounts.mismatch})</option>
+                    <option value="retroactive">Retroativas ({flagCounts.retroactive})</option>
+                    <option value="out_of_period">Fora do Período ({flagCounts.out_of_period})</option>
+                    <option value="retained">Retidas ({flagCounts.retained})</option>
+                </select>
+
+                {(filterCompany !== 'all' || filterStatus !== 'all' || searchTerm) && (
+                    <button
+                        onClick={() => { setFilterCompany('all'); setFilterStatus('all'); setSearchTerm(''); }}
+                        className="px-3 py-1.5 text-xs font-bold text-red-600 bg-red-50 border border-red-200 rounded-lg hover:bg-red-100 transition"
+                    >
+                        Limpar Filtros
+                    </button>
+                )}
+            </div>
+
             {error && (
                 <div className="p-4 bg-red-50 text-red-600 rounded-lg flex items-center gap-2 border border-red-100">
                     <AlertCircle size={20} />
                     {error}
                 </div>
             )}
- 
+
             {loading ? (
                 <div className="py-20 text-center text-slate-400 flex flex-col items-center">
                     <Loader2 className="animate-spin mb-2" size={32} />
@@ -132,7 +240,7 @@ export default function NfseList() {
             ) : filteredGroups.length === 0 ? (
                 <div className="py-20 text-center text-slate-400 bg-white rounded-xl border border-dashed border-slate-300">
                     <Archive size={48} className="mx-auto mb-4 opacity-20" />
-                    <p>{searchTerm ? 'Nenhuma nota encontrada para sua busca.' : 'Nenhuma empresa com notas fiscais processadas.'}</p>
+                    <p>{searchTerm || filterStatus !== 'all' ? 'Nenhuma nota encontrada para os filtros aplicados.' : 'Nenhuma empresa com notas fiscais processadas.'}</p>
                 </div>
             ) : (
                 <div className="space-y-4">
@@ -159,6 +267,14 @@ export default function NfseList() {
                                 <div className="flex items-center gap-3">
                                     <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
                                         <button
+                                            onClick={() => handleOpenCompanyFolder(group.base_output_path, group.name)}
+                                            className="flex items-center gap-2 px-3 py-1.5 bg-blue-50 text-blue-700 rounded-md text-sm font-medium hover:bg-blue-100 transition"
+                                            title="Abrir pasta da empresa no Explorer"
+                                        >
+                                            <FolderOpen size={16} />
+                                            Abrir Pasta
+                                        </button>
+                                        <button
                                             onClick={() => handleDownloadZip(group.id, group.name)}
                                             className="flex items-center gap-2 px-3 py-1.5 bg-slate-100 text-slate-700 rounded-md text-sm font-medium hover:bg-slate-200 transition"
                                         >
@@ -172,19 +288,24 @@ export default function NfseList() {
                                             <Trash2 size={16} />
                                             Resetar
                                         </button>
+                                        {resetMsg.id === group.id && (
+                                            <span className="text-[10px] font-bold text-green-600 bg-green-50 px-2 py-0.5 rounded animate-pulse">
+                                                {resetMsg.text}
+                                            </span>
+                                        )}
                                     </div>
                                     <div className="w-px h-6 bg-slate-200 mx-1"></div>
                                     {expandedCompanies[group.id] ? <ChevronDown className="text-slate-400" /> : <ChevronRight className="text-slate-400" />}
                                 </div>
                             </div>
- 
+
                             {/* Company Competences blocks */}
                             {expandedCompanies[group.id] && (
                                 <div className="p-4 bg-slate-50/30 space-y-3">
                                     {group.competences.map((comp) => (
                                         <div key={comp.period} className="bg-white rounded-lg border border-slate-200 shadow-sm overflow-hidden">
                                             {/* Competence Sub-Header */}
-                                            <div 
+                                            <div
                                                 className="px-4 py-2 bg-slate-100/50 flex items-center justify-between cursor-pointer hover:bg-slate-100 transition"
                                                 onClick={() => toggleCompetence(group.id, comp.period)}
                                             >
@@ -225,17 +346,18 @@ export default function NfseList() {
                                                         </thead>
                                                         <tbody className="divide-y divide-slate-50">
                                                             {comp.notes.map((note) => (
-                                                                <tr key={note.id} className={`hover:bg-slate-50/30 transition ${(note.is_out_of_period || note.competence_mismatch) ? 'bg-amber-50/50' : ''}`}>
+                                                                <tr key={note.id} className={`hover:bg-slate-50/30 transition ${(note.is_out_of_period || note.competence_mismatch || note.is_retroactive) ? 'bg-amber-50/50' : ''}`}>
                                                                     <td className="px-6 py-2 font-mono text-[10px] text-slate-500">
                                                                         <div className="flex items-center gap-2">
                                                                             <span className="text-slate-900 font-medium">#{note.access_key.substring(0, 6)}</span>
                                                                             {note.access_key.substring(6, 30)}...
-                                                                            {(note.is_out_of_period || note.competence_mismatch) && (
+                                                                            {(note.is_out_of_period || note.competence_mismatch || note.is_retroactive) && (
                                                                                 <div className="group relative">
                                                                                     <AlertCircle size={14} className="text-amber-500 cursor-help" />
                                                                                     <div className="absolute left-full ml-2 w-48 p-2 bg-slate-800 text-white text-[10px] rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
-                                                                                        {note.is_out_of_period && "⚠️ Emitida fora do período solicitado. "}
-                                                                                        {note.competence_mismatch && "⚠️ Mês da competência difere da emissão."}
+                                                                                        {note.is_out_of_period && "Emitida fora do período solicitado. "}
+                                                                                        {note.competence_mismatch && "Mês da competência difere da emissão. "}
+                                                                                        {note.is_retroactive && "Nota retroativa."}
                                                                                     </div>
                                                                                 </div>
                                                                             )}
@@ -254,9 +376,9 @@ export default function NfseList() {
                                                                     </td>
                                                                     <td className="px-6 py-2 text-right">
                                                                         <button
-                                                                            onClick={() => handleDownloadSingleXml(note.xml_url)}
+                                                                            onClick={() => handleOpenXml(group.base_output_path, note.xml_url)}
                                                                             className="p-1 text-slate-400 hover:text-brand-600 rounded-lg transition"
-                                                                            title="Ver XML"
+                                                                            title="Abrir no Explorer"
                                                                         >
                                                                             <ExternalLink size={14} />
                                                                         </button>

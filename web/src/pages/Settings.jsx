@@ -22,6 +22,7 @@ export default function Settings() {
     });
     const [loadingSettings, setLoadingSettings] = useState(false);
     const [savingSettings, setSavingSettings] = useState(false);
+    const [clearingNfs, setClearingNfs] = useState(false);
     const [msg, setMsg] = useState({ type: '', text: '' });
 
     // Carrega os dados salvos no momento do login e do backend
@@ -76,6 +77,24 @@ export default function Settings() {
             }
         } catch (err) {
             console.error("Erro ao selecionar diretório:", err);
+        }
+    };
+
+    const handleClearNfs = async () => {
+        if (!window.confirm("⚠️ ATENÇÃO: Isso irá excluir permanentemente todas as notas fiscais processadas do banco de dados. Esta ação não pode ser desfeita. Deseja continuar?")) {
+            return;
+        }
+
+        setClearingNfs(true);
+        setMsg({ type: '', text: '' });
+        try {
+            await axios.delete(`${API_URL}/api/settings/clear-nfs`);
+            setMsg({ type: 'success', text: 'Banco de dados limpo com sucesso!' });
+            setTimeout(() => setMsg({ type: '', text: '' }), 5000);
+        } catch (err) {
+            setMsg({ type: 'error', text: 'Erro ao limpar banco de dados.' });
+        } finally {
+            setClearingNfs(false);
         }
     };
 
@@ -241,6 +260,35 @@ export default function Settings() {
                         className="w-full px-4 py-2 bg-slate-100 border border-slate-200 rounded-lg text-slate-400 font-mono cursor-not-allowed"
                         placeholder="sk_live_..."
                     />
+                </div>
+            </div>
+
+            {/* CARD 3: Manutenção e Limpeza */}
+            <div className="bg-white rounded-xl shadow-sm border border-red-100 overflow-hidden">
+                <div className="px-6 py-4 border-b border-red-50 bg-red-50/30">
+                    <h3 className="font-bold text-lg text-red-800 flex items-center gap-2">
+                        <HardDrive size={20} className="text-red-600" />
+                        Gerenciamento de Dados
+                    </h3>
+                </div>
+                <div className="p-6">
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                        <div>
+                            <h4 className="text-sm font-bold text-slate-800">Limpar Banco de Dados (Notas)</h4>
+                            <p className="text-xs text-slate-500 mt-1 max-w-md">
+                                Esta ação removerá todas as notas fiscais salvas no banco de dados. 
+                                Os arquivos XML em disco **não** serão excluídos.
+                            </p>
+                        </div>
+                        <button
+                            onClick={handleClearNfs}
+                            disabled={clearingNfs}
+                            className={`flex items-center gap-2 px-6 py-2 bg-white text-red-600 border border-red-200 rounded-lg font-bold hover:bg-red-50 transition shadow-sm disabled:opacity-50`}
+                        >
+                            {clearingNfs ? <Loader2 size={18} className="animate-spin" /> : <Ban size={18} />}
+                            Limpar Banco de Dados
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>

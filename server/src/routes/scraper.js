@@ -40,4 +40,19 @@ router.post('/fetch-gov', async (req, res) => {
     }
 });
 
+// POST /scraper/bulk-sync — sincroniza todas as empresas de uma vez para o mês informado
+router.post('/bulk-sync', async (req, res) => {
+    try {
+        const { month, type = 'tomadas' } = req.body;
+        if (!month || !/^\d{4}-\d{2}$/.test(month)) {
+            return res.status(400).json({ error: 'Parâmetro "month" obrigatório no formato YYYY-MM.' });
+        }
+        const result = await nfseScraperService.bulkSyncAllCompanies({ month, type });
+        res.json(result);
+    } catch (error) {
+        console.error('Bulk Sync Error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
 module.exports = router;

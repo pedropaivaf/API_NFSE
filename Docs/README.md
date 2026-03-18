@@ -48,4 +48,4 @@ cd web && npm run electron:build
 cd web && npm run release:patch  # patch | minor | major
 ```
 
-**Versão atual:** v0.2.2 — ver [guides/build-release.md](guides/build-release.md) para histórico.
+**Versão atual:** v0.5.0 — ver [guides/build-release.md](guides/build-release.md) para histórico.

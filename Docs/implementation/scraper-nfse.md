@@ -47,6 +47,18 @@ Servidor: Microsoft-IIS/10.0 + ASP.NET MVC 5.2
 
 ## Histórico de Bugs e Correções
 
+### v0.5.0 (18/03/2026)
+- **Fix "Ver XML"**: Caminho absoluto agora resolvido via `base_output_path` por empresa (custom_output_path || settings.output_path || default).
+- **Default Output Path**: Settings retorna `~/Documents/XML's` como default se não configurado.
+- **Bulk Sync Melhorado**: Validação de credenciais antes de processar (pula empresas sem certificado/senha). Tabela de resultados por empresa no frontend.
+- **Filtros em NfseList**: Filtro por empresa, divergência de competência, retroativas, fora do período, retidas.
+- **Botão Abrir Pasta**: Abre pasta da empresa diretamente no Windows Explorer.
+
+### v0.4.6 (17/03/2026)
+- **Fix Competência**: Corrigido bug de timezone (UTC→local) no parsing de competenceDate. Lógica de `competenceMismatch` restrita a notas retroativas (emissão mês atual + competência mês anterior).
+- **NSU Deduplication**: Pre-fetch de access_keys em Set para O(1) lookup ao invés de N+1 queries.
+- **Bulk Sync Endpoint**: `POST /scraper/bulk-sync` para sincronizar todas as empresas de um mês.
+
 ### v0.3.4 (10/03/2026)
 - **Extração Acelerada**: Chunking aumentado para **28 dias**. Delays reduzidos para **500ms** (chunks) e **100ms** (downloads).
 - **Safety Note**: Caso ocorram bloqueios de IP ou erros recorrentes "input-validation-error" sem motivo aparente, reverter os delays para os valores de 1s e 300ms respectivamente.

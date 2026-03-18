@@ -82,8 +82,19 @@ class NfseScraperService {
     async runExtractionJob(config, outputDirBase = null) {
         log(`[RPA] Iniciando trabalho para: ${config.companyId} | Método: ${config.method || 'pfx'}`);
 
-        const { method = 'pfx', certificateFilename, password, loginCnpj, loginPassword } = config;
+        const { method = 'pfx', certificateFilename, password, loginCnpj, loginPassword, companyId } = config;
         const settings = await this._getSettings();
+        
+        // Buscar dados da empresa para criar pastas organizadas
+        const { data: company } = await supabase
+            .from('companies')
+            .select('name, custom_output_path')
+            .eq('id', companyId)
+            .single();
+
+        const companyName = company?.name || `Empresa_${companyId.substring(0, 8)}`;
+        const baseOutputDir = company?.custom_output_path || settings.output_path || path.join(os.homedir(), 'Documents', 'XML\'s');
+
         const jar = new CookieJar();
         let apiClient;
 
@@ -95,13 +106,14 @@ class NfseScraperService {
                 });
                 await this._verifyAuthSuccess(authResp);
                 const authData = this._extractAuthData(authResp.data);
-                return await this._continueExtraction(apiClient, authData, config, outputDirBase);
+                return await this._continueExtraction(apiClient, authData, config, baseOutputDir, companyName);
             } else {
                 apiClient = this._createStandardClient(jar);
+                log('[RPA] Autenticando via Senha...');
                 const authResp = await this._performPasswordLogin(apiClient, loginCnpj, loginPassword);
                 await this._verifyAuthSuccess(authResp);
                 const authData = this._extractAuthData(authResp.data);
-                return await this._continueExtraction(apiClient, authData, config, outputDirBase);
+                return await this._continueExtraction(apiClient, authData, config, baseOutputDir, companyName);
             }
         } catch (error) {
             console.error('[RPA-ERROR]', error.message);
@@ -262,10 +274,10 @@ class NfseScraperService {
         return { urlRest, accessToken };
     }
 
-    async _continueExtraction(apiClient, authData, config, outputDirBase) {
+    async _continueExtraction(apiClient, authData, config, outputDir, companyName) {
         const { accessToken } = authData;
         const { companyId, type, period, format, startDate, endDate } = config;
-        const outputDir = outputDirBase || path.join(os.homedir(), 'Documents', 'notas_processadas');
+        const noteType = type === 'emitidas' ? 'emitida' : 'recebida';
 
         try {
             // 5. Calcular período de datas
@@ -277,6 +289,19 @@ class NfseScraperService {
 
             let totalSaved = 0;
             let totalFound = 0;
+            let totalSkipped = 0;
+            let totalRetained = 0;
+            let totalMismatch = 0;
+            let totalRetroactive = 0;
+            let totalErrors = 0;
+
+            // Pré-busca NSUs existentes da empresa para deduplicação O(1) — evita N queries por nota
+            const { data: existingRows } = await supabase
+                .from('nfs')
+                .select('access_key')
+                .eq('company_id', companyId);
+            const existingNSUSet = new Set((existingRows || []).map(r => r.access_key));
+            log(`[RPA-NSU] ${existingNSUSet.size} NSUs já existentes carregados para deduplicação.`);
 
             for (const chunk of chunks) {
                 log(`[RPA] Processando intervalo: ${chunk.dataInicio} → ${chunk.dataFim}`);
@@ -306,9 +331,6 @@ class NfseScraperService {
                 } else {
                     const htmlData = String(notasResp.data || '');
                     
-                    // O portal tem um texto estático de ajuda: "O período informado não deve ser superior a 30 dias."
-                    // O ERRO real é: "O período entre a data inicial e a data final não pode ser superior a 30 dias."
-                    // Verificamos também a classe de validação do ASP.NET MVC.
                     const isErrorMsg = htmlData.includes('não pode ser superior a 30 dias') || 
                                      htmlData.includes('input-validation-error') ||
                                      htmlData.includes('field-validation-error');
@@ -324,23 +346,32 @@ class NfseScraperService {
                 totalFound += objExtraido.notas.length;
                 log(`[RPA] ${objExtraido.notas.length} notas no intervalo atual.`);
 
-                // 8. Salvar no Banco (Supabase) com Prevenção de Duplicatas e Competência
+                // Parse chunk boundaries for retention detection
+                const [sd, sm, sy] = chunk.dataInicio.split('/');
+                const [ed, em, ey] = chunk.dataFim.split('/');
+                const chunkStart = new Date(parseInt(sy), parseInt(sm) - 1, parseInt(sd));
+                const chunkEnd = new Date(parseInt(ey), parseInt(em) - 1, parseInt(ed), 23, 59, 59);
+
+                // 8. Salvar no Banco (Supabase) com todos os campos corretos
                 for (const nota of objExtraido.notas) {
                     try {
-                        if (nota.chaveTabela) {
-                            const { data: existing } = await supabase
-                                .from('nfs')
-                                .select('access_key')
-                                .eq('company_id', companyId)
-                                .eq('access_key', nota.chaveTabela)
-                                .maybeSingle();
-
-                            if (existing) continue;
+                        const accessKey = nota.chaveTabela;
+                        if (!accessKey) {
+                            log(`[RPA-DB] ⚠️  Nota sem chave de acesso, ignorada.`, 'warn');
+                            continue;
                         }
 
+                        // Duplicate check via NSU Set (O(1), sem query extra por nota)
+                        if (existingNSUSet.has(accessKey)) {
+                            totalSkipped++;
+                            continue;
+                        }
+
+                        // Parse valor
                         const valorStr = String(nota.valorServico || '0').trim();
                         const valorLimpo = parseFloat(valorStr.replace(/R\$\s*/g, '').replace(/\./g, '').replace(',', '.'));
 
+                        // Parse data de emissão
                         const dataStr = String(nota.dataGeracao || '').trim();
                         let isoDate = null;
                         if (dataStr) {
@@ -354,73 +385,140 @@ class NfseScraperService {
                         }
                         if (!isoDate) isoDate = new Date().toISOString();
 
-                        // Tratar Competência (MM/YYYY)
+                        const noteDate = new Date(isoDate);
+
+                        // Parse competência (MM/YYYY) — usa horário local para evitar bug de timezone (UTC-3)
                         let competenceDate = null;
                         let competencePeriod = String(nota.competencia || '').trim();
                         if (competencePeriod.includes('/')) {
                             const [mm, yyyy] = competencePeriod.split('/');
-                            competenceDate = `${yyyy}-${mm}-01`;
+                            if (mm && yyyy) competenceDate = new Date(parseInt(yyyy), parseInt(mm) - 1, 1);
                         }
 
-                        // Verificar se está fora do período solicitado ou se há divergência de competência
-                        const noteDate = new Date(isoDate);
-                        const [sd, sm, sy] = chunk.dataInicio.split('/');
-                        const [ed, em, ey] = chunk.dataFim.split('/');
-                        const chunkStart = new Date(sy, sm - 1, sd);
-                        const chunkEnd = new Date(ey, em - 1, ed, 23, 59, 59);
+                        // Verifica se nota é RETIDA: emitida antes do período solicitado mas apareceu agora
+                        const isRetained = noteDate < chunkStart;
+                        if (isRetained) {
+                            totalRetained++;
+                            log(`[RPA-RETIDA] 📌 Nota retida detectada: ${accessKey} (emitida em ${nota.dataGeracao}, apareceu no período ${chunk.dataInicio}-${chunk.dataFim})`, 'warn');
+                        }
 
-                        const isOutOfPeriod = noteDate < chunkStart || noteDate > chunkEnd;
-                        
-                        // Divergência de competência: Mês/Ano da emissão diferente do Mês/Ano da competência
+                        // Verifica divergência de competência:
+                        // Alerta SOMENTE quando emitida no mês atual mas competência refere-se ao mês anterior (nota retroativa)
+                        const now = new Date();
+                        const currentMonth = now.getMonth();
+                        const currentYear = now.getFullYear();
+                        const lastMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+                        const lastMonth = lastMonthDate.getMonth();
+                        const lastMonthYear = lastMonthDate.getFullYear();
+
                         let competenceMismatch = false;
                         if (competenceDate) {
-                            const compDateObj = new Date(competenceDate);
-                            competenceMismatch = noteDate.getMonth() !== compDateObj.getMonth() || noteDate.getFullYear() !== compDateObj.getFullYear();
+                            competenceMismatch =
+                                (noteDate.getMonth() === currentMonth && noteDate.getFullYear() === currentYear) &&
+                                (competenceDate.getMonth() === lastMonth && competenceDate.getFullYear() === lastMonthYear);
+                            if (competenceMismatch) {
+                                totalMismatch++;
+                                log(`[RPA-COMPET] ⚠️  Divergência de competência: ${accessKey} (emissão ${nota.dataGeracao} ≠ competência ${competencePeriod})`, 'warn');
+                            }
                         }
+
+                        // Nota retroativa = mesma condição que divergência de competência
+                        const isRetroactive = competenceMismatch;
+                        if (isRetroactive) {
+                            totalRetroactive++;
+                            log(`[RPA-RETRO] 🕒 Nota retroativa: ${accessKey} (emitida em ${currentMonth+1}/${currentYear} ref. ${competencePeriod})`, 'info');
+                        }
+
+
+                        // NSU: O portal NFSe usa a chave de acesso como NSU (identificador único nacional)
+                        // Formato padrão: 52 dígitos numéricos (chave de acesso NF-e)
+                        const nsu = accessKey;
+
+                        // XML URL: Nova estrutura hierárquica
+                        // Pasta: [Empresa]/[Tipo]/[Mês]
+                        const mesComp = competenceDate ? competenceDate.getMonth() + 1 : noteDate.getMonth() + 1;
+                        const relativePath = `${this._sanitizeFolderName(companyName)}/${type}/${mesComp}`;
 
                         const insertData = {
                             company_id: companyId,
-                            access_key: nota.chaveTabela,
+                            access_key: accessKey,
+                            nsu: nsu,
                             issue_date: isoDate,
                             amount: isNaN(valorLimpo) ? 0 : valorLimpo,
                             status: 'processed',
-                            xml_url: `local_extract/${type}/${nota.chaveTabela}.xml`,
-                            competence_date: competenceDate,
+                            xml_url: `${relativePath}/${accessKey}.xml`,
+                            note_type: noteType,
+                            competence_date: competenceDate ? competenceDate.toISOString() : null,
                             competence_period: competencePeriod || null,
-                            is_out_of_period: isOutOfPeriod,
-                            competence_mismatch: competenceMismatch
+                            is_out_of_period: noteDate > chunkEnd,
+                            competence_mismatch: competenceMismatch,
+                            is_retained: isRetained,
+                            is_retroactive: isRetroactive,
+                            emitter_cnpj: nota.cnpjEmitente || null,
+                            emitter_name: nota.nomeEmitente || null,
                         };
+
 
                         const { error: upsertError } = await supabase
                             .from('nfs')
                             .upsert(insertData, { onConflict: 'company_id,access_key' });
 
-                        if (!upsertError) totalSaved++;
+                        if (upsertError) {
+                            totalErrors++;
+                            log(`[RPA-DB] ❌ Falha ao salvar ${accessKey}: ${upsertError.message}`, 'error');
+                            console.error('[RPA-DB] Upsert error detail:', upsertError);
+                        } else {
+                            totalSaved++;
+                            const flags = [];
+                            if (isRetained) flags.push('RETIDA');
+                            if (competenceMismatch) flags.push('COMPET.DIVERGE');
+                            if (insertData.is_retroactive) flags.push('RETROATIVA');
+                            log(`[RPA-DB] ✅ Nota salva: ${accessKey}${flags.length > 0 ? ' [' + flags.join(', ') + ']' : ''}`);
+                            existingNSUSet.add(accessKey); // Atualiza Set para evitar duplicata em chunks seguintes
+                        }
                     } catch (e) {
-                        log(`[RPA-DB] Falha na nota ${nota.chaveTabela}: ${e.message}`, 'error');
+                        totalErrors++;
+                        log(`[RPA-DB] ❌ Exceção na nota ${nota.chaveTabela}: ${e.message}`, 'error');
                     }
                 }
 
-                // 9. Downloads para disco (do intervalo atual)
-                const pastaDestino = path.join(outputDir, type);
-                await this.processarDownloadsNotas(apiClient, objExtraido.notas, pastaDestino, (format || 'xml').toLowerCase(), accessToken);
+                // 9. Downloads para disco (lógica per-nota para pastas de mês)
+                await this.processarDownloadsNotas(apiClient, objExtraido.notas, outputDir, companyName, type, (format || 'xml').toLowerCase(), accessToken);
                 
                 // Delay curto entre chunks para evitar bloqueio
                 if (chunks.length > 1) await this._delay(500);
             }
 
+            // Summary log
+            const summaryLine = `[RPA] ========================================\n[RPA] ✅ EXTRAÇÃO CONCLUÍDA\n[RPA]    📄 Notas encontradas : ${totalFound}\n[RPA]    💾 Novas salvas      : ${totalSaved}\n[RPA]    ⏭️  Já existiam      : ${totalSkipped}\n[RPA]    📌 Retidas           : ${totalRetained}\n[RPA]    ⚠️  Compet. divergente: ${totalMismatch}\n[RPA]    🕒 Retroativas       : ${totalRetroactive}\n[RPA]    ❌ Erros             : ${totalErrors}\n[RPA] ========================================`;
+            summaryLine.split('\n').forEach(l => log(l));
+            console.log(summaryLine);
+
             return {
                 success: true,
-                message: `Extração concluída.`,
+                message: totalSaved > 0
+                    ? `${totalSaved} nota(s) salva(s) com sucesso!`
+                    : totalFound > 0
+                        ? `Nenhuma nota nova — ${totalFound} já existiam no banco.`
+                        : `Nenhuma nota encontrada no período.`,
                 count: totalSaved,
-                details: `${totalFound} notas encontradas. ${totalSaved} novas notas persistidas.`,
+                found: totalFound,
+                skipped: totalSkipped,
+                retained: totalRetained,
+                mismatch: totalMismatch,
+                retroactive: totalRetroactive,
+                errors: totalErrors,
+                details: `${totalFound} encontradas | ${totalSaved} novas | ${totalSkipped} duplicadas | ${totalRetained} retidas | ${totalRetroactive} retroativas | ${totalErrors} erros`,
             };
+
 
         } catch (error) {
             console.error('[RPA-ERROR]', error.message);
             throw error;
         }
     }
+
+
 
     extrairDadosNotasJson(data) {
         const lista = Array.isArray(data) ? data : (data?.notas || data?.items || data?.result || data?.data || []);
@@ -560,19 +658,34 @@ class NfseScraperService {
         }
     }
 
-    async processarDownloadsNotas(apiClient, notasExtraidas, pastaDestino, formatoDesejado = 'xml', accessToken = null) {
+    async processarDownloadsNotas(apiClient, notasExtraidas, baseOutputDir, companyName, type, formatoDesejado = 'xml', accessToken = null) {
         try {
-            await fsPromises.mkdir(pastaDestino, { recursive: true });
             let sucessoCount = 0;
             let falhaCount = 0;
 
             for (const nota of notasExtraidas) {
-                // SÓ BAIXAR SE NÃO EXISTIR LOCALMENTE (Opcional, mas bom para performance)
+                // Cálculo da pasta por nota (mesma lógica do insertData)
+                let mesComp = new Date().getMonth() + 1;
+                
+                // Tenta pegar o mês da competência (MM/YYYY)
+                const compStr = String(nota.competencia || '').trim();
+                if (compStr.includes('/')) {
+                    mesComp = parseInt(compStr.split('/')[0]);
+                } else if (nota.dataGeracao) {
+                    // Fallback para mês da emissão
+                    const parts = (nota.dataGeracao.split(' ')[0] || '').split('/');
+                    if (parts.length === 3) mesComp = parseInt(parts[1]);
+                }
+
+                const subPasta = `${this._sanitizeFolderName(companyName)}/${type}/${mesComp}`;
+                const pastaDestinoFinal = path.join(baseOutputDir, subPasta);
+                
+                await fsPromises.mkdir(pastaDestinoFinal, { recursive: true });
+
                 const ext = formatoDesejado === 'xml' ? 'xml' : 'pdf';
-                const caminho = path.join(pastaDestino, `${nota.chaveTabela}.${ext}`);
+                const caminho = path.join(pastaDestinoFinal, `${nota.chaveTabela}.${ext}`);
 
                 if (fs.existsSync(caminho)) {
-                    // log(`[RPA-DOWNLOAD] Arquivo ${nota.chaveTabela}.${ext} já existe localmente. Pulando.`);
                     sucessoCount++;
                     continue;
                 }
@@ -591,6 +704,74 @@ class NfseScraperService {
             console.error('[RPA-BATCH] Erro no lote de downloads:', error.message);
             throw error;
         }
+    }
+    async bulkSyncAllCompanies({ month, type = 'tomadas' }) {
+        const [year, mm] = month.split('-');
+        const startDate = `01/${mm}/${year}`;
+        const lastDay = new Date(parseInt(year), parseInt(mm), 0).getDate();
+        const endDate = `${lastDay}/${mm}/${year}`;
+
+        const { data: companies, error } = await supabase
+            .from('companies')
+            .select('*')
+            .order('name', { ascending: true });
+
+        if (error) throw new Error(`Falha ao buscar empresas: ${error.message}`);
+        if (!companies || companies.length === 0) throw new Error('Nenhuma empresa cadastrada.');
+
+        log(`[BULK] Iniciando sincronização em lote: ${companies.length} empresa(s) | ${month} | ${type}`);
+
+        // Validar credenciais antes de iniciar
+        const validCompanies = [];
+        const results = [];
+        for (const company of companies) {
+            const hasCert = company.certificate_local_name || company.certificate_url;
+            const hasPassword = company.login_user && company.login_password;
+            if (!hasCert && !hasPassword) {
+                results.push({ company: company.name, success: false, error: 'Sem credenciais configuradas (certificado ou login/senha).' });
+                log(`[BULK] ⚠️  ${company.name}: Sem credenciais — pulando.`, 'warn');
+                continue;
+            }
+            validCompanies.push(company);
+        }
+
+        log(`[BULK] ${validCompanies.length} empresa(s) com credenciais válidas de ${companies.length} total.`);
+
+        for (const company of validCompanies) {
+            log(`[BULK] ▶ Processando: ${company.name}`);
+            try {
+                const config = {
+                    companyId: company.id,
+                    type,
+                    period: 'custom',
+                    startDate,
+                    endDate,
+                    method: (company.certificate_local_name || company.certificate_url) ? 'pfx' : 'password',
+                    certificateFilename: company.certificate_local_name,
+                    password: company.certificate_password,
+                    loginCnpj: company.login_user || company.cnpj,
+                    loginPassword: company.login_password,
+                };
+                const result = await this.runExtractionJob(config);
+                results.push({ company: company.name, success: true, ...result });
+                log(`[BULK] ✅ ${company.name}: ${result.count} nota(s) salva(s)`);
+            } catch (err) {
+                results.push({ company: company.name, success: false, error: err.message });
+                log(`[BULK] ❌ ${company.name}: ${err.message}`, 'error');
+            }
+        }
+
+        const totalSaved = results.reduce((acc, r) => acc + (r.count || 0), 0);
+        const totalErrors = results.filter(r => !r.success).length;
+        log(`[BULK] ========================================`);
+        log(`[BULK] ✅ LOTE CONCLUÍDO: ${companies.length} empresa(s) | ${totalSaved} nota(s) salva(s) | ${totalErrors} erro(s)`);
+        log(`[BULK] ========================================`);
+
+        return { success: true, total: companies.length, totalSaved, totalErrors, results };
+    }
+
+    _sanitizeFolderName(name) {
+        return name.replace(/[<>:"/\\|?*]/g, '').trim() || 'Empresa';
     }
 }
 

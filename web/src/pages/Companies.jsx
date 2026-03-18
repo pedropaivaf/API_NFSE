@@ -16,7 +16,9 @@ import {
     X,
     User,
     Lock,
-    Pencil
+    Pencil,
+    Eye,
+    EyeOff
 } from 'lucide-react';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
@@ -37,12 +39,15 @@ export default function Companies() {
         password: '',
         loginUser: '',
         loginPassword: '',
-        localFilename: ''
+        localFilename: '',
+        custom_output_path: ''
     });
     const [uploadMode, setUploadMode] = useState('upload'); // 'upload' or 'local'
     const [file, setFile] = useState(null);
     const [localFiles, setLocalFiles] = useState([]);
     const [loadingFiles, setLoadingFiles] = useState(false);
+    const [showLoginPassword, setShowLoginPassword] = useState(false);
+    const [showCertPassword, setShowCertPassword] = useState(false);
 
     useEffect(() => {
         fetchCompanies();
@@ -93,7 +98,8 @@ export default function Companies() {
             password: company.certificate_password || '',
             loginUser: company.login_user || '',
             loginPassword: company.login_password || '',
-            localFilename: company.certificate_local_name || ''
+            localFilename: company.certificate_local_name || '',
+            custom_output_path: company.custom_output_path || ''
         });
         setUploadMode(company.certificate_local_name ? 'local' : 'upload');
         setIsModalOpen(true);
@@ -118,6 +124,7 @@ export default function Companies() {
                 data.append('password', formData.password);
                 data.append('loginUser', formData.loginUser);
                 data.append('loginPassword', formData.loginPassword);
+                data.append('custom_output_path', formData.custom_output_path);
                 
                 if (uploadMode === 'local') {
                     data.append('localFilename', formData.localFilename);
@@ -148,11 +155,14 @@ export default function Companies() {
             password: '',
             loginUser: '',
             loginPassword: '',
-            localFilename: ''
+            localFilename: '',
+            custom_output_path: ''
         });
         setFile(null);
         setUploadMode('upload');
         setEditingId(null);
+        setShowLoginPassword(false);
+        setShowCertPassword(false);
     };
 
     return (
@@ -249,18 +259,19 @@ export default function Companies() {
 
             {/* Registration/Edit Modal */}
             {isModalOpen && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-md overflow-y-auto">
-                    <div className="bg-white rounded-3xl w-full max-w-2xl shadow-2xl relative animate-in zoom-in-95 duration-200 my-auto border-4 border-white">
-                        <div className="flex items-center justify-between p-7 border-b-2 border-slate-100 bg-slate-50/50 rounded-t-3xl">
+                <div className="fixed inset-0 z-[100] flex bg-slate-100 overflow-hidden">
+                    <div className="bg-white w-full h-full relative animate-in zoom-in-95 duration-200 flex flex-col">
+                        <div className="flex flex-shrink-0 items-center justify-between p-6 px-10 border-b border-slate-200 bg-white z-10 shadow-sm">
                             <div>
                                 <h3 className="text-2xl font-black text-slate-900">{editingId ? "Editar Empresa" : "Nova Empresa"}</h3>
                                 <p className="text-slate-500 text-sm font-medium">Preencha as informações de acesso da empresa.</p>
                             </div>
-                            <button onClick={() => setIsModalOpen(false)} className="p-2 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition"><X size={28} /></button>
+                            <button type="button" onClick={() => setIsModalOpen(false)} className="p-3 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition"><X size={28} /></button>
                         </div>
 
-                        <form onSubmit={handleSubmit} className="p-7 space-y-8">
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                        <div className="flex-1 overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+                            <form id="company-form" onSubmit={handleSubmit} className="flex flex-col p-8 md:p-10 space-y-6 max-w-5xl mx-auto w-full">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                                 <section className="space-y-4">
                                     <h4 className="flex items-center gap-2 text-xs font-black text-slate-900 uppercase tracking-widest opacity-60">
                                         <Building2 size={16} /> Dados Básicos
@@ -309,11 +320,18 @@ export default function Companies() {
                                         <div className="relative">
                                             <Lock size={18} className="absolute left-4 top-3.5 text-slate-500" />
                                             <input 
-                                                type="password"
-                                                className="w-full pl-12 pr-4 py-3 bg-slate-100 border-2 border-slate-200 rounded-xl focus:ring-4 focus:ring-brand-500/10 focus:border-brand-600 outline-none transition font-medium text-slate-900"
+                                                type={showLoginPassword ? "text" : "password"}
+                                                className="w-full pl-12 pr-12 py-3 bg-slate-100 border-2 border-slate-200 rounded-xl focus:ring-4 focus:ring-brand-500/10 focus:border-brand-600 outline-none transition font-medium text-slate-900"
                                                 value={formData.loginPassword}
                                                 onChange={e => setFormData({ ...formData, loginPassword: e.target.value })}
                                             />
+                                            <button
+                                                type="button"
+                                                onClick={() => setShowLoginPassword(!showLoginPassword)}
+                                                className="absolute right-4 top-3.5 text-slate-400 hover:text-slate-600 transition"
+                                            >
+                                                {showLoginPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                                            </button>
                                         </div>
                                     </div>
                                 </section>
@@ -329,12 +347,21 @@ export default function Companies() {
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                     <div>
                                         <label className="block text-sm font-bold text-slate-900 mb-1.5">Senha do Certificado</label>
-                                        <input 
-                                            type="password"
-                                            className="w-full px-4 py-3 bg-slate-100 border-2 border-slate-200 rounded-xl focus:ring-4 focus:ring-brand-500/10 focus:border-brand-600 outline-none transition font-medium text-slate-900"
-                                            value={formData.password}
-                                            onChange={e => setFormData({ ...formData, password: e.target.value })}
-                                        />
+                                        <div className="relative">
+                                            <input 
+                                                type={showCertPassword ? "text" : "password"}
+                                                className="w-full pl-4 pr-12 py-3 bg-slate-100 border-2 border-slate-200 rounded-xl focus:ring-4 focus:ring-brand-500/10 focus:border-brand-600 outline-none transition font-medium text-slate-900"
+                                                value={formData.password}
+                                                onChange={e => setFormData({ ...formData, password: e.target.value })}
+                                            />
+                                            <button
+                                                type="button"
+                                                onClick={() => setShowCertPassword(!showCertPassword)}
+                                                className="absolute right-4 top-3.5 text-slate-400 hover:text-slate-600 transition"
+                                            >
+                                                {showCertPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                                            </button>
+                                        </div>
                                     </div>
                                     <div>
                                         <label className="block text-sm font-bold text-slate-900 mb-1.5">Modo de Certificado</label>
@@ -342,15 +369,14 @@ export default function Companies() {
                                             <button 
                                                 type="button"
                                                 onClick={() => setUploadMode('upload')}
-                                                disabled={!!editingId} // No novo upload ao editar por enquanto (complexo via multipart sem refactor pesado)
-                                                className={`flex-1 flex items-center justify-center gap-2 py-2.5 text-xs font-black rounded-xl transition ${uploadMode === 'upload' ? 'bg-white shadow-md text-brand-700' : 'text-slate-600'} disabled:opacity-50`}
+                                                className={`flex-1 flex items-center justify-center gap-2 py-2.5 text-xs font-black rounded-xl transition ${uploadMode === 'upload' ? 'bg-white shadow-md text-brand-700' : 'text-slate-600'} hover:bg-white/50`}
                                             >
                                                 <FileUp size={14} /> Upload
                                             </button>
                                             <button 
                                                 type="button"
                                                 onClick={() => setUploadMode('local')}
-                                                className={`flex-1 flex items-center justify-center gap-2 py-2.5 text-xs font-black rounded-xl transition ${uploadMode === 'local' ? 'bg-white shadow-md text-brand-700' : 'text-slate-600'}`}
+                                                className={`flex-1 flex items-center justify-center gap-2 py-2.5 text-xs font-black rounded-xl transition ${uploadMode === 'local' ? 'bg-white shadow-md text-brand-700' : 'text-slate-600'} hover:bg-white/50`}
                                             >
                                                 <HardDrive size={14} /> Servidor
                                             </button>
@@ -359,7 +385,7 @@ export default function Companies() {
                                 </div>
 
                                 {uploadMode === 'upload' ? (
-                                    <div className={`border-2 border-dashed ${file ? 'border-brand-400 bg-brand-50' : 'border-slate-300'} rounded-2xl p-10 text-center hover:bg-slate-50 transition relative group`}>
+                                    <div className={`border-2 border-dashed ${file ? 'border-brand-400 bg-brand-50' : 'border-slate-300'} rounded-2xl p-8 text-center hover:bg-slate-50 transition relative group`}>
                                         <input 
                                             type="file" 
                                             accept=".pfx"
@@ -387,24 +413,53 @@ export default function Companies() {
                                 )}
                             </section>
 
-                            <div className="flex gap-4 pt-6">
+                            <hr className="border-slate-100" />
+
+                            <section className="space-y-4">
+                                <h4 className="flex items-center gap-2 text-xs font-black text-slate-900 uppercase tracking-widest opacity-60">
+                                    <HardDrive size={16} /> Configurações de Arquivos
+                                </h4>
+                                <div>
+                                    <label className="block text-sm font-bold text-slate-900 mb-1.5">Caminho de Saída Customizado (Opcional)</label>
+                                    <div className="relative">
+                                        <HardDrive size={18} className="absolute left-4 top-3.5 text-slate-500" />
+                                        <input 
+                                            type="text"
+                                            className="w-full pl-12 pr-4 py-3 bg-slate-100 border-2 border-slate-200 rounded-xl focus:ring-4 focus:ring-brand-500/10 focus:border-brand-600 outline-none transition font-medium text-slate-900"
+                                            placeholder="Ex: C:\Notas\Empresa_A (Deixe vazio para usar o padrão)"
+                                            value={formData.custom_output_path}
+                                            onChange={e => setFormData({ ...formData, custom_output_path: e.target.value })}
+                                        />
+                                    </div>
+                                    <p className="mt-1.5 text-[10px] text-slate-500 font-bold">
+                                        Se definido, este caminho substituirá a configuração global para esta empresa.
+                                    </p>
+                                </div>
+                            </section>
+
+                            </form>
+                        </div>
+
+                        <div className="flex-shrink-0 border-t border-slate-200 bg-white p-6 px-10 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] z-10">
+                            <div className="flex gap-4 max-w-5xl mx-auto w-full">
                                 <button 
                                     type="button"
                                     onClick={() => setIsModalOpen(false)}
-                                    className="flex-1 px-8 py-4 border-2 border-slate-200 text-slate-900 rounded-2xl hover:bg-slate-100 transition font-black text-lg shadow-sm"
+                                    className="flex-1 px-6 py-3 border-2 border-slate-200 text-slate-900 rounded-xl hover:bg-slate-100 transition font-black shadow-sm"
                                 >
                                     Cancelar
                                 </button>
                                 <button 
                                     type="submit"
+                                    form="company-form"
                                     disabled={isSubmitting}
-                                    className="flex-1 px-8 py-4 bg-brand-600 text-white rounded-2xl hover:bg-brand-700 transition font-black text-lg flex items-center justify-center gap-3 shadow-lg shadow-brand-200 disabled:opacity-50 ring-2 ring-brand-700"
+                                    className="flex-1 px-6 py-3 bg-brand-600 text-white rounded-xl hover:bg-brand-700 transition font-black flex items-center justify-center gap-3 shadow-md shadow-brand-200 disabled:opacity-50 ring-2 ring-brand-700"
                                 >
                                     {isSubmitting ? <Loader2 size={24} className="animate-spin" /> : editingId ? <CheckCircle2 size={24} /> : <Plus size={24} className="stroke-[3]" />}
-                                    {isSubmitting ? "Processando..." : editingId ? "Salvar Alterações" : "Cadastrar Empresa"}
+                                    {isSubmitting ? "Processando..." : editingId ? "Salvar" : "Cadastrar"}
                                 </button>
                             </div>
-                        </form>
+                        </div>
                     </div>
                 </div>
             )}

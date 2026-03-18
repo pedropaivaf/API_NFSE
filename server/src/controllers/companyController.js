@@ -117,7 +117,8 @@ exports.createCompany = async (req, res) => {
                     certificate_url: filePath || null,
                     certificate_local_name: localFilename || null,
                     login_user: loginUser || null,
-                    login_password: loginPassword || null
+                    login_password: loginPassword || null,
+                    custom_output_path: req.body.custom_output_path || null
                 }
             ])
             .select()
@@ -147,19 +148,23 @@ exports.syncCompany = async (req, res) => {
 
 exports.updateCompanyCredentials = async (req, res) => {
     const { id } = req.params;
-    const { certificateLocalName, password } = req.body;
+    const { certificateLocalName, password, loginUser, loginPassword } = req.body;
     const { log } = require('../utils/logger');
 
     console.log(`[CREDENTIALS] Solicitado salvamento para empresa ${id}`);
-    log(`[CREDENTIALS] Atualizando: Cert=${certificateLocalName}, Senha=${password ? '***' : 'VAZIA'}`);
+    log(`[CREDENTIALS] Atualizando: Cert=${certificateLocalName}, Senha=${password ? '***' : 'VAZIA'}, LoginUser=${loginUser || '-'}`);
 
     try {
+        const updatePayload = {};
+
+        if (certificateLocalName !== undefined) updatePayload.certificate_local_name = certificateLocalName;
+        if (password !== undefined) updatePayload.certificate_password = password;
+        if (loginUser !== undefined) updatePayload.login_user = loginUser;
+        if (loginPassword !== undefined) updatePayload.login_password = loginPassword;
+
         const { data, error } = await supabase
             .from('companies')
-            .update({
-                certificate_local_name: certificateLocalName,
-                certificate_password: password
-            })
+            .update(updatePayload)
             .eq('id', id)
             .select()
             .single();
@@ -344,7 +349,8 @@ exports.updateCompany = async (req, res) => {
             login_user: loginUser || null,
             login_password: loginPassword || null,
             certificate_password: password || null,
-            certificate_local_name: localFilename || null
+            certificate_local_name: localFilename || null,
+            custom_output_path: req.body.custom_output_path || null
         };
 
         const { data, error } = await supabase

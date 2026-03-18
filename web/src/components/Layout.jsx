@@ -55,8 +55,8 @@ export default function Layout() {
             </aside>
 
             {/* Main Content */}
-            <main className="flex-1 overflow-auto">
-                <header className="bg-white border-b border-slate-200 h-16 flex items-center px-8 justify-between sticky top-0 z-10">
+            <main className="flex-1 overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+                <header className="bg-white border-b border-slate-200 h-16 flex items-center px-8 justify-between sticky top-0 z-10 flex-shrink-0">
                     <h1 className="text-lg font-semibold text-slate-800">Visão Geral</h1>
                     <div className="flex items-center gap-4">
                         <div className="px-3 py-1 bg-slate-100 rounded-full text-sm font-medium text-slate-600">
