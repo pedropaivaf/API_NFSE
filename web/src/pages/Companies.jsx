@@ -54,7 +54,7 @@ export default function Companies() {
         try {
             const res = await axios.get(`${API_URL}/companies`);
             setCompanies(res.data);
-        } catch (err) {
+        } catch {
             setError("Erro ao carregar empresas");
         } finally {
             setLoading(false);
@@ -80,7 +80,7 @@ export default function Companies() {
             await axios.delete(`${API_URL}/companies/${id}`);
             setSuccess("Empresa excluída!");
             fetchCompanies();
-        } catch (err) {
+        } catch {
             setError("Erro ao excluir empresa");
         }
     };
