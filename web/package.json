@@ -1,13 +1,13 @@
 {
   "name": "web",
   "private": true,
-  "version": "0.5.1",
+  "version": "0.5.3",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "electron:dev": "concurrently \"vite\" \"wait-on tcp:5173 && env -u ELECTRON_RUN_AS_NODE electron .\"",
+    "electron:dev": "concurrently \"vite\" \"wait-on tcp:5173 && cross-env ELECTRON_RUN_AS_NODE= electron .\"",
     "electron:build": "vite build && electron-builder",
     "release:patch": "npm version patch && npm run electron:build && git push --follow-tags",
     "release:minor": "npm version minor && npm run electron:build && git push --follow-tags",

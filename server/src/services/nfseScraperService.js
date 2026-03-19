@@ -705,11 +705,15 @@ class NfseScraperService {
             throw error;
         }
     }
-    async bulkSyncAllCompanies({ month, type = 'tomadas' }) {
+    async bulkSyncAllCompanies({ month, type = 'recebidas' }) {
         const [year, mm] = month.split('-');
-        const startDate = `01/${mm}/${year}`;
-        const lastDay = new Date(parseInt(year), parseInt(mm), 0).getDate();
-        const endDate = `${lastDay}/${mm}/${year}`;
+        const startDate = `${year}-${mm}-01`;
+        
+        // Cap endDate at today if the sync month is the current month
+        const now = new Date();
+        const lastDayInMonth = new Date(parseInt(year), parseInt(mm), 0);
+        const effectiveEndDate = lastDayInMonth > now ? now : lastDayInMonth;
+        const endDate = `${year}-${mm}-${String(effectiveEndDate.getDate()).padStart(2, '0')}`;
 
         const { data: companies, error } = await supabase
             .from('companies')
@@ -721,20 +725,9 @@ class NfseScraperService {
 
         log(`[BULK] Iniciando sincronização em lote: ${companies.length} empresa(s) | ${month} | ${type}`);
 
-        // Validar credenciais antes de iniciar
-        const validCompanies = [];
         const results = [];
-        for (const company of companies) {
-            const hasCert = company.certificate_local_name || company.certificate_url;
-            const hasPassword = company.login_user && company.login_password;
-            if (!hasCert && !hasPassword) {
-                results.push({ company: company.name, success: false, error: 'Sem credenciais configuradas (certificado ou login/senha).' });
-                log(`[BULK] ⚠️  ${company.name}: Sem credenciais — pulando.`, 'warn');
-                continue;
-            }
-            validCompanies.push(company);
-        }
-
+        const validCompanies = companies.filter(c => (c.certificate_local_name || c.certificate_url) || (c.login_user && c.login_password));
+        
         log(`[BULK] ${validCompanies.length} empresa(s) com credenciais válidas de ${companies.length} total.`);
 
         for (const company of validCompanies) {
@@ -761,13 +754,27 @@ class NfseScraperService {
             }
         }
 
-        const totalSaved = results.reduce((acc, r) => acc + (r.count || 0), 0);
-        const totalErrors = results.filter(r => !r.success).length;
+        const stats = results.reduce((acc, r) => {
+            acc.totalSaved += (r.count || 0);
+            acc.totalFound += (r.found || 0);
+            acc.totalSkipped += (r.skipped || 0);
+            acc.totalRetained += (r.retained || 0);
+            acc.totalMismatch += (r.mismatch || 0);
+            acc.totalRetroactive += (r.retroactive || 0);
+            acc.totalErrors += r.success ? 0 : 1;
+            return acc;
+        }, { totalSaved: 0, totalFound: 0, totalSkipped: 0, totalRetained: 0, totalMismatch: 0, totalRetroactive: 0, totalErrors: 0 });
+
         log(`[BULK] ========================================`);
-        log(`[BULK] ✅ LOTE CONCLUÍDO: ${companies.length} empresa(s) | ${totalSaved} nota(s) salva(s) | ${totalErrors} erro(s)`);
+        log(`[BULK] ✅ LOTE CONCLUÍDO: ${companies.length} empresa(s) | ${stats.totalSaved} nota(s) salva(s) | ${stats.totalErrors} erro(s)`);
         log(`[BULK] ========================================`);
 
-        return { success: true, total: companies.length, totalSaved, totalErrors, results };
+        return { 
+            success: true, 
+            total: companies.length, 
+            ...stats,
+            results 
+        };
     }
 
     _sanitizeFolderName(name) {
