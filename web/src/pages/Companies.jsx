@@ -185,7 +185,7 @@ export default function Companies() {
                 <div className="flex items-center gap-3 p-4 bg-red-50 text-red-700 rounded-xl border border-red-200 animate-in fade-in slide-in-from-top-4">
                     <AlertCircle size={20} />
                     <p className="text-sm font-bold">{error}</p>
-                    <button onClick={() => setError(null)} className="ml-auto"><X size={16} /></button>
+                    <button onClick={() => setError(null)} className="ml-auto" aria-label="Fechar mensagem de erro" title="Fechar"><X size={16} /></button>
                 </div>
             )}
 
@@ -193,7 +193,7 @@ export default function Companies() {
                 <div className="flex items-center gap-3 p-4 bg-green-50 text-green-700 rounded-xl border border-green-200 animate-in fade-in slide-in-from-top-4">
                     <CheckCircle2 size={20} />
                     <p className="text-sm font-bold">{success}</p>
-                    <button onClick={() => setSuccess(null)} className="ml-auto"><X size={16} /></button>
+                    <button onClick={() => setSuccess(null)} className="ml-auto" aria-label="Fechar mensagem de sucesso" title="Fechar"><X size={16} /></button>
                 </div>
             )}
 
@@ -266,7 +266,7 @@ export default function Companies() {
                                 <h3 className="text-2xl font-black text-slate-900">{editingId ? "Editar Empresa" : "Nova Empresa"}</h3>
                                 <p className="text-slate-500 text-sm font-medium">Preencha as informações de acesso da empresa.</p>
                             </div>
-                            <button type="button" onClick={() => setIsModalOpen(false)} className="p-3 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition"><X size={28} /></button>
+                            <button type="button" onClick={() => setIsModalOpen(false)} className="p-3 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition" aria-label="Fechar modal" title="Fechar"><X size={28} /></button>
                         </div>
 
                         <div className="flex-1 overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
@@ -329,6 +329,8 @@ export default function Companies() {
                                                 type="button"
                                                 onClick={() => setShowLoginPassword(!showLoginPassword)}
                                                 className="absolute right-4 top-3.5 text-slate-400 hover:text-slate-600 transition"
+                                                aria-label={showLoginPassword ? "Ocultar senha de acesso" : "Mostrar senha de acesso"}
+                                                title={showLoginPassword ? "Ocultar senha" : "Mostrar senha"}
                                             >
                                                 {showLoginPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                                             </button>
@@ -358,6 +360,8 @@ export default function Companies() {
                                                 type="button"
                                                 onClick={() => setShowCertPassword(!showCertPassword)}
                                                 className="absolute right-4 top-3.5 text-slate-400 hover:text-slate-600 transition"
+                                                aria-label={showCertPassword ? "Ocultar senha do certificado" : "Mostrar senha do certificado"}
+                                                title={showCertPassword ? "Ocultar senha" : "Mostrar senha"}
                                             >
                                                 {showCertPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                                             </button>
