@@ -5,6 +5,8 @@ import ConfirmModal from '../components/ConfirmModal';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
+const dateFormatter = new Intl.DateTimeFormat('pt-BR');
+
 export default function BuscarNota() {
     const [loadingCompanies, setLoadingCompanies] = useState(false);
     const [companies, setCompanies] = useState([]);
@@ -854,7 +856,7 @@ export default function BuscarNota() {
                                                 {certInfo.cnpj && <span className="ml-1 text-green-600">({certInfo.cnpj})</span>}
                                                 {certInfo.notAfter && (
                                                     <span className="ml-2 text-xs text-green-600">
-                                                        — vence {new Date(certInfo.notAfter).toLocaleDateString('pt-BR')}
+                                                        — vence {dateFormatter.format(new Date(certInfo.notAfter))}
                                                     </span>
                                                 )}
                                             </span>
