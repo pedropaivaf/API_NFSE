@@ -329,6 +329,8 @@ export default function Companies() {
                                                 type="button"
                                                 onClick={() => setShowLoginPassword(!showLoginPassword)}
                                                 className="absolute right-4 top-3.5 text-slate-400 hover:text-slate-600 transition"
+                                                aria-label={showLoginPassword ? "Ocultar senha" : "Mostrar senha"}
+                                                title={showLoginPassword ? "Ocultar senha" : "Mostrar senha"}
                                             >
                                                 {showLoginPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                                             </button>
@@ -358,6 +360,8 @@ export default function Companies() {
                                                 type="button"
                                                 onClick={() => setShowCertPassword(!showCertPassword)}
                                                 className="absolute right-4 top-3.5 text-slate-400 hover:text-slate-600 transition"
+                                                aria-label={showCertPassword ? "Ocultar senha" : "Mostrar senha"}
+                                                title={showCertPassword ? "Ocultar senha" : "Mostrar senha"}
                                             >
                                                 {showCertPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                                             </button>
