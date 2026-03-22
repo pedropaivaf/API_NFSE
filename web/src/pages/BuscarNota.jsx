@@ -5,8 +5,11 @@ import ConfirmModal from '../components/ConfirmModal';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
+// ⚡ Bolt: Extract formatter to module level to prevent recreating it on every render/loop
+const dateFormatter = new Intl.DateTimeFormat('pt-BR');
+
 export default function BuscarNota() {
-    const [loadingCompanies, setLoadingCompanies] = useState(false);
+    const [_loadingCompanies, setLoadingCompanies] = useState(false);
     const [companies, setCompanies] = useState([]);
     const [companiesError, setCompaniesError] = useState(null);
 
@@ -16,8 +19,8 @@ export default function BuscarNota() {
     const [loadingExtrair, setLoadingExtrair] = useState(false);
     const [loadingValidate, setLoadingValidate] = useState(false);
     const [certInfo, setCertInfo] = useState(null);
-    const [companyNotFound, setCompanyNotFound] = useState(false);
-    const [loadingQuickRegister, setLoadingQuickRegister] = useState(false);
+    const [_companyNotFound, setCompanyNotFound] = useState(false);
+    const [_loadingQuickRegister, setLoadingQuickRegister] = useState(false);
     const [error, setError] = useState(null);
     const [success, setSuccess] = useState(null);
 
@@ -854,7 +857,7 @@ export default function BuscarNota() {
                                                 {certInfo.cnpj && <span className="ml-1 text-green-600">({certInfo.cnpj})</span>}
                                                 {certInfo.notAfter && (
                                                     <span className="ml-2 text-xs text-green-600">
-                                                        — vence {new Date(certInfo.notAfter).toLocaleDateString('pt-BR')}
+                                                        — vence {dateFormatter.format(new Date(certInfo.notAfter))}
                                                     </span>
                                                 )}
                                             </span>
