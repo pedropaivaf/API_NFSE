@@ -5,6 +5,9 @@ import { Key, Trash2, Shield, Loader2, RefreshCw, Copy, Check, Ban, CheckCircle,
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
+// ⚡ Bolt: Extract formatter to module level to prevent recreating it on every render/loop
+const dateFormatter = new Intl.DateTimeFormat('pt-BR');
+
 export default function Users() {
     const [users, setUsers] = useState([]);
     const [loading, setLoading] = useState(false);
@@ -64,7 +67,7 @@ export default function Users() {
             generateRandomKey();
             setFormData(prev => ({ ...prev, name: '' }));
             alert('Licença gerada com sucesso!');
-        } catch (err) {
+        } catch {
             alert("Erro ao criar chave.");
         } finally {
             setSubmitting(false);
@@ -76,7 +79,7 @@ export default function Users() {
         try {
             await axios.put(`${API_URL}/users/${id}/toggle-status`, { is_active: !currentStatus });
             loadUsers(); // Recarrega para mostrar o novo status
-        } catch (err) {
+        } catch {
             alert("Erro ao atualizar status do cliente.");
         }
     };
@@ -86,7 +89,7 @@ export default function Users() {
             try {
                 await axios.delete(`${API_URL}/users/${id}`);
                 loadUsers();
-            } catch (err) {
+            } catch {
                 alert("Erro ao revogar chave.");
             }
         }
@@ -199,7 +202,7 @@ export default function Users() {
                                             {user.plan_type === 'MENSAL' && user.expires_at && (
                                                 <span className={`text-xs flex items-center gap-1 mt-0.5 ${new Date(user.expires_at) < new Date() ? 'text-red-500 font-bold' : 'text-slate-500'}`}>
                                                     <Clock size={12} />
-                                                    Vence: {new Date(user.expires_at).toLocaleDateString('pt-BR')}
+                                                    Vence: {dateFormatter.format(new Date(user.expires_at))}
                                                 </span>
                                             )}
                                         </div>

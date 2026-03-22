@@ -60,7 +60,7 @@ export default function Settings() {
             await axios.post(`${API_URL}/api/settings`, globalSettings);
             setMsg({ type: 'success', text: 'Configurações salvas com sucesso!' });
             setTimeout(() => setMsg({ type: '', text: '' }), 5000);
-        } catch (err) {
+        } catch {
             setMsg({ type: 'error', text: 'Erro ao salvar configurações.' });
         } finally {
             setSavingSettings(false);
@@ -91,7 +91,7 @@ export default function Settings() {
             await axios.delete(`${API_URL}/api/settings/clear-nfs`);
             setMsg({ type: 'success', text: 'Banco de dados limpo com sucesso!' });
             setTimeout(() => setMsg({ type: '', text: '' }), 5000);
-        } catch (err) {
+        } catch {
             setMsg({ type: 'error', text: 'Erro ao limpar banco de dados.' });
         } finally {
             setClearingNfs(false);

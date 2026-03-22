@@ -7,6 +7,10 @@ import {
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
+// ⚡ Bolt: Extract formatter to module level to prevent recreating it on every render/loop
+const currencyFormatter = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
+const dateFormatter = new Intl.DateTimeFormat('pt-BR');
+
 export default function NfseList() {
     const [groupedNfs, setGroupedNfs] = useState([]);
     const [loading, setLoading] = useState(false);
@@ -319,7 +323,7 @@ export default function NfseList() {
                                                         {comp.count} Notas
                                                     </span>
                                                     <span className="text-[10px] text-slate-500 font-medium italic">
-                                                        Total: {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(comp.totalAmount)}
+                                                        Total: {currencyFormatter.format(comp.totalAmount)}
                                                     </span>
                                                 </div>
                                                 <button
@@ -364,10 +368,10 @@ export default function NfseList() {
                                                                         </div>
                                                                     </td>
                                                                     <td className="px-6 py-2 text-slate-600">
-                                                                        {new Date(note.issue_date).toLocaleDateString()}
+                                                                        {dateFormatter.format(new Date(note.issue_date))}
                                                                     </td>
                                                                     <td className="px-6 py-2 text-right font-semibold text-slate-900">
-                                                                        {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(note.amount)}
+                                                                        {currencyFormatter.format(note.amount)}
                                                                     </td>
                                                                     <td className="px-6 py-2 text-center">
                                                                         <span className={`inline-flex px-2 py-0.5 rounded-full text-[9px] uppercase font-bold ${note.status === 'processed' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
