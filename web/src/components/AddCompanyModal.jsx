@@ -129,6 +129,8 @@ export default function AddCompanyModal({ isOpen, onClose, onSuccess }) {
                                     type="button"
                                     className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600 transition"
                                     onClick={() => setShowPassword(!showPassword)}
+                                    aria-label={showPassword ? "Ocultar senha" : "Mostrar senha"}
+                                    title={showPassword ? "Ocultar senha" : "Mostrar senha"}
                                 >
                                     {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                                 </button>
