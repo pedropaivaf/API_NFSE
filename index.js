@@ -3,21 +3,25 @@ const axios = require('axios');
 const https = require('https');
 const fs = require('fs');
 const zlib = require('zlib');
+const util = require('util');
+
+const gunzipAsync = util.promisify(zlib.gunzip);
 
 /**
  * Função para converter o conteúdo do Governo (Base64 + GZIP) em arquivo XML real
+ * ⚡ Bolt: Changed to async to prevent blocking the event loop during decompression and file writing.
  */
-function salvarXml(conteudoBase64, chaveAcesso) {
+async function salvarXml(conteudoBase64, chaveAcesso) {
     try {
         // 1. Converte Base64 para binário (Buffer)
         const bufferCompactado = Buffer.from(conteudoBase64, 'base64');
 
         // 2. Descompacta o GZIP (padrão do portal nacional)
-        const xmlDescompactado = zlib.gunzipSync(bufferCompactado);
+        const xmlDescompactado = await gunzipAsync(bufferCompactado);
 
         // 3. Define o nome do arquivo e salva na pasta do projeto
         const nomeArquivo = `./${chaveAcesso}.xml`;
-        fs.writeFileSync(nomeArquivo, xmlDescompactado);
+        await fs.promises.writeFile(nomeArquivo, xmlDescompactado);
 
         console.log(`   💾 Arquivo salvo com sucesso: ${nomeArquivo}`);
     } catch (erro) {
@@ -60,16 +64,21 @@ async function buscarNotasProducao() {
         if (dados.StatusProcessamento === "DOCUMENTOS_LOCALIZADOS" && dados.LoteDFe.length > 0) {
             console.log(`✅ Sucesso! ${dados.LoteDFe.length} documentos encontrados.`);
             
-            // Percorre cada nota encontrada no lote
-            dados.LoteDFe.forEach((item, index) => {
+            // ⚡ Bolt: Replaced sequential synchronous processing with concurrent Promise.all
+            // This allows Node.js to decompress and write multiple files in parallel,
+            // significantly reducing total processing time for large batches.
+            const promessas = dados.LoteDFe.map((item, index) => {
                 console.log(`\n[Nota ${index + 1}] Chave: ${item.ChaveAcesso}`);
                 
                 if (item.ArquivoXml) {
-                    salvarXml(item.ArquivoXml, item.ChaveAcesso);
+                    return salvarXml(item.ArquivoXml, item.ChaveAcesso);
                 } else {
                     console.log("   ⚠️ Nota sem conteúdo XML disponível no lote.");
+                    return Promise.resolve();
                 }
             });
+
+            await Promise.all(promessas);
 
             console.log("\n--- Processamento Finalizado ---");
         } else {
