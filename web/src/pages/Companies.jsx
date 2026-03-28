@@ -59,7 +59,7 @@ export default function Companies() {
         try {
             const res = await axios.get(`${API_URL}/companies`);
             setCompanies(res.data);
-        } catch (err) {
+        } catch {
             setError("Erro ao carregar empresas");
         } finally {
             setLoading(false);
@@ -85,7 +85,7 @@ export default function Companies() {
             await axios.delete(`${API_URL}/companies/${id}`);
             setSuccess("Empresa excluída!");
             fetchCompanies();
-        } catch (err) {
+        } catch {
             setError("Erro ao excluir empresa");
         }
     };
@@ -185,7 +185,7 @@ export default function Companies() {
                 <div className="flex items-center gap-3 p-4 bg-red-50 text-red-700 rounded-xl border border-red-200 animate-in fade-in slide-in-from-top-4">
                     <AlertCircle size={20} />
                     <p className="text-sm font-bold">{error}</p>
-                    <button onClick={() => setError(null)} className="ml-auto"><X size={16} /></button>
+                    <button onClick={() => setError(null)} aria-label="Fechar mensagem de erro" className="ml-auto"><X size={16} /></button>
                 </div>
             )}
 
@@ -193,7 +193,7 @@ export default function Companies() {
                 <div className="flex items-center gap-3 p-4 bg-green-50 text-green-700 rounded-xl border border-green-200 animate-in fade-in slide-in-from-top-4">
                     <CheckCircle2 size={20} />
                     <p className="text-sm font-bold">{success}</p>
-                    <button onClick={() => setSuccess(null)} className="ml-auto"><X size={16} /></button>
+                    <button onClick={() => setSuccess(null)} aria-label="Fechar mensagem de sucesso" className="ml-auto"><X size={16} /></button>
                 </div>
             )}
 
@@ -214,6 +214,7 @@ export default function Companies() {
                                         onClick={() => handleEdit(company)}
                                         className="p-2 text-slate-500 hover:text-brand-600 hover:bg-brand-50 rounded-lg transition border border-slate-100"
                                         title="Editar"
+                                        aria-label={`Editar empresa ${company.name || "Sem Nome"}`}
                                     >
                                         <Pencil size={18} />
                                     </button>
@@ -221,6 +222,7 @@ export default function Companies() {
                                         onClick={() => handleDelete(company.id)}
                                         className="p-2 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition border border-slate-100"
                                         title="Excluir"
+                                        aria-label={`Excluir empresa ${company.name || "Sem Nome"}`}
                                     >
                                         <Trash2 size={18} />
                                     </button>
@@ -266,7 +268,7 @@ export default function Companies() {
                                 <h3 className="text-2xl font-black text-slate-900">{editingId ? "Editar Empresa" : "Nova Empresa"}</h3>
                                 <p className="text-slate-500 text-sm font-medium">Preencha as informações de acesso da empresa.</p>
                             </div>
-                            <button type="button" onClick={() => setIsModalOpen(false)} className="p-3 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition"><X size={28} /></button>
+                            <button type="button" onClick={() => setIsModalOpen(false)} aria-label="Fechar modal" className="p-3 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition"><X size={28} /></button>
                         </div>
 
                         <div className="flex-1 overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
@@ -329,6 +331,8 @@ export default function Companies() {
                                                 type="button"
                                                 onClick={() => setShowLoginPassword(!showLoginPassword)}
                                                 className="absolute right-4 top-3.5 text-slate-400 hover:text-slate-600 transition"
+                                                title={showLoginPassword ? "Ocultar senha de login" : "Mostrar senha de login"}
+                                                aria-label={showLoginPassword ? "Ocultar senha de login" : "Mostrar senha de login"}
                                             >
                                                 {showLoginPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                                             </button>
@@ -358,6 +362,8 @@ export default function Companies() {
                                                 type="button"
                                                 onClick={() => setShowCertPassword(!showCertPassword)}
                                                 className="absolute right-4 top-3.5 text-slate-400 hover:text-slate-600 transition"
+                                                title={showCertPassword ? "Ocultar senha do certificado" : "Mostrar senha do certificado"}
+                                                aria-label={showCertPassword ? "Ocultar senha do certificado" : "Mostrar senha do certificado"}
                                             >
                                                 {showCertPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                                             </button>
