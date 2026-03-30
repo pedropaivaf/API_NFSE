@@ -78,7 +78,7 @@ export default function AddCompanyModal({ isOpen, onClose, onSuccess }) {
             <div className="bg-white w-full h-full relative flex flex-col">
                 <div className="px-8 py-6 border-b border-slate-200 flex justify-between items-center bg-white flex-shrink-0 z-10 shadow-sm">
                     <h3 className="font-bold text-2xl text-slate-800">Nova Empresa</h3>
-                    <button type="button" onClick={onClose} className="p-3 text-slate-400 hover:text-slate-800 hover:bg-slate-100 rounded-xl transition">
+                        <button type="button" onClick={onClose} aria-label="Fechar" className="p-3 text-slate-400 hover:text-slate-800 hover:bg-slate-100 rounded-xl transition">
                         <X size={24} />
                     </button>
                 </div>
@@ -127,6 +127,7 @@ export default function AddCompanyModal({ isOpen, onClose, onSuccess }) {
                                 />
                                 <button
                                     type="button"
+                                        aria-label={showPassword ? "Ocultar senha" : "Mostrar senha"}
                                     className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600 transition"
                                     onClick={() => setShowPassword(!showPassword)}
                                 >

@@ -21,7 +21,7 @@ export default function ConfirmModal({ isOpen, onClose, onConfirm, title, messag
                     <div className={`p-2 rounded-lg ${type === 'danger' ? 'bg-red-50 text-red-600' : 'bg-brand-50 text-brand-600'}`}>
                         <AlertCircle size={24} />
                     </div>
-                    <button onClick={onClose} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition">
+                    <button onClick={onClose} aria-label="Fechar" className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition">
                         <X size={20} />
                     </button>
                 </div>
