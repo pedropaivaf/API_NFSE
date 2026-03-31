@@ -1,6 +1,3 @@
-const fs = require('fs');
-const path = require('path');
-
 // A very simple PNG to ICO converter logic is complex, 
 // so let's try to use a CLI tool via npx if available or just stick to PNG.
 // Actually, electron-builder can generate the icon automatically from a 256x256+ PNG.

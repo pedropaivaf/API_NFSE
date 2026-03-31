@@ -6,7 +6,7 @@ import ConfirmModal from '../components/ConfirmModal';
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
 export default function BuscarNota() {
-    const [loadingCompanies, setLoadingCompanies] = useState(false);
+    const [_loadingCompanies, setLoadingCompanies] = useState(false);
     const [companies, setCompanies] = useState([]);
     const [companiesError, setCompaniesError] = useState(null);
 
@@ -16,8 +16,8 @@ export default function BuscarNota() {
     const [loadingExtrair, setLoadingExtrair] = useState(false);
     const [loadingValidate, setLoadingValidate] = useState(false);
     const [certInfo, setCertInfo] = useState(null);
-    const [companyNotFound, setCompanyNotFound] = useState(false);
-    const [loadingQuickRegister, setLoadingQuickRegister] = useState(false);
+    const [_companyNotFound, setCompanyNotFound] = useState(false);
+    const [_loadingQuickRegister, setLoadingQuickRegister] = useState(false);
     const [error, setError] = useState(null);
     const [success, setSuccess] = useState(null);
 
