@@ -64,7 +64,7 @@ export default function Users() {
             generateRandomKey();
             setFormData(prev => ({ ...prev, name: '' }));
             alert('Licença gerada com sucesso!');
-        } catch (err) {
+        } catch {
             alert("Erro ao criar chave.");
         } finally {
             setSubmitting(false);
@@ -76,7 +76,7 @@ export default function Users() {
         try {
             await axios.put(`${API_URL}/users/${id}/toggle-status`, { is_active: !currentStatus });
             loadUsers(); // Recarrega para mostrar o novo status
-        } catch (err) {
+        } catch {
             alert("Erro ao atualizar status do cliente.");
         }
     };
@@ -86,7 +86,7 @@ export default function Users() {
             try {
                 await axios.delete(`${API_URL}/users/${id}`);
                 loadUsers();
-            } catch (err) {
+            } catch {
                 alert("Erro ao revogar chave.");
             }
         }
@@ -125,7 +125,7 @@ export default function Users() {
                                 className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg font-mono text-slate-600"
                                 value={formData.access_key}
                             />
-                            <button type="button" onClick={generateRandomKey} className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-brand-600" title="Gerar nova chave">
+                            <button type="button" onClick={generateRandomKey} className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-brand-600" title="Gerar nova chave" aria-label="Gerar nova chave de acesso">
                                 <RefreshCw size={18} />
                             </button>
                         </div>
@@ -185,7 +185,7 @@ export default function Users() {
                                         <code className={`px-2 py-1 rounded text-sm font-mono border ${user.is_active ? 'bg-slate-100 text-slate-700 border-slate-200' : 'bg-red-50 text-red-700 border-red-200 line-through'}`}>
                                             {user.access_key}
                                         </code>
-                                        <button onClick={() => handleCopy(user.access_key)} className="text-slate-400 hover:text-brand-600 p-1" title="Copiar Chave">
+                                        <button onClick={() => handleCopy(user.access_key)} className="text-slate-400 hover:text-brand-600 p-1" title="Copiar Chave" aria-label="Copiar chave de acesso">
                                             {copiedKey === user.access_key ? <Check size={16} className="text-green-500" /> : <Copy size={16} />}
                                         </button>
                                     </div>
@@ -223,12 +223,13 @@ export default function Users() {
                                                 onClick={() => handleToggleStatus(user.id, user.is_active)}
                                                 className={`${user.is_active ? 'text-yellow-500 hover:text-yellow-600' : 'text-green-500 hover:text-green-600'} transition`}
                                                 title={user.is_active ? "Bloquear Acesso" : "Liberar Acesso"}
+                                                aria-label={user.is_active ? "Bloquear Acesso do Usuário" : "Liberar Acesso do Usuário"}
                                             >
                                                 {user.is_active ? <Ban size={18} /> : <CheckCircle size={18} />}
                                             </button>
 
                                             {/* Botão de Apagar Definitivamente */}
-                                            <button onClick={() => handleDelete(user.id, user.name)} className="text-slate-400 hover:text-red-600" title="Apagar do Sistema">
+                                            <button onClick={() => handleDelete(user.id, user.name)} className="text-slate-400 hover:text-red-600" title="Apagar do Sistema" aria-label="Apagar Usuário do Sistema">
                                                 <Trash2 size={18} />
                                             </button>
                                         </div>
