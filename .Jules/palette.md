@@ -1,0 +1,3 @@
+## 2024-05-15 - Icon-only buttons lack ARIA labels and focus states
+**Learning:** Found multiple icon-only buttons (like edit/delete icons and modal close buttons) missing `aria-label`s, making them inaccessible to screen readers. In addition, they lacked `focus-visible` styling for keyboard navigation, making the UI harder to use for those navigating via keyboard.
+**Action:** When adding or maintaining icon-only buttons, always ensure an `aria-label` is present to describe the action, and use `focus-visible:ring-2 focus-visible:ring-brand-500 outline-none` (or similar depending on the component context) to provide clear focus states.
