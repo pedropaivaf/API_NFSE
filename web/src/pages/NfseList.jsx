@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
 import {
     FileText, Search, Loader2, Download, AlertCircle, ChevronDown, ChevronRight,
@@ -122,45 +122,51 @@ export default function NfseList() {
     };
 
     // Apply all filters
-    const filteredGroups = groupedNfs
-        .filter(group => filterCompany === 'all' || group.id === filterCompany)
-        .filter(group => {
-            const term = searchTerm.toLowerCase();
-            if (!term) return true;
-            const matchesCompany = group.name.toLowerCase().includes(term) || group.cnpj.includes(term);
-            const matchesNote = group.competences.some(c =>
-                c.notes.some(n => n.access_key.toLowerCase().includes(term))
-            );
-            return matchesCompany || matchesNote;
-        })
-        .map(group => ({
-            ...group,
-            competences: group.competences
-                .map(comp => ({
-                    ...comp,
-                    notes: comp.notes.filter(note => {
-                        if (filterStatus === 'mismatch') return note.competence_mismatch;
-                        if (filterStatus === 'retroactive') return note.is_retroactive;
-                        if (filterStatus === 'out_of_period') return note.is_out_of_period;
-                        if (filterStatus === 'retained') return note.is_retained;
-                        return true;
-                    })
-                }))
-                .filter(comp => comp.notes.length > 0)
-        }))
-        .filter(group => group.competences.length > 0);
+    // ⚡ Bolt Optimization: Memoize to avoid expensive array iterations (filter, map) on unrelated re-renders
+    const filteredGroups = useMemo(() => {
+        return groupedNfs
+            .filter(group => filterCompany === 'all' || group.id === filterCompany)
+            .filter(group => {
+                const term = searchTerm.toLowerCase();
+                if (!term) return true;
+                const matchesCompany = group.name.toLowerCase().includes(term) || group.cnpj.includes(term);
+                const matchesNote = group.competences.some(c =>
+                    c.notes.some(n => n.access_key.toLowerCase().includes(term))
+                );
+                return matchesCompany || matchesNote;
+            })
+            .map(group => ({
+                ...group,
+                competences: group.competences
+                    .map(comp => ({
+                        ...comp,
+                        notes: comp.notes.filter(note => {
+                            if (filterStatus === 'mismatch') return note.competence_mismatch;
+                            if (filterStatus === 'retroactive') return note.is_retroactive;
+                            if (filterStatus === 'out_of_period') return note.is_out_of_period;
+                            if (filterStatus === 'retained') return note.is_retained;
+                            return true;
+                        })
+                    }))
+                    .filter(comp => comp.notes.length > 0)
+            }))
+            .filter(group => group.competences.length > 0);
+    }, [groupedNfs, filterCompany, filterStatus, searchTerm]);
 
     // Count flags across all data for badge display
-    const flagCounts = groupedNfs.reduce((acc, g) => {
-        g.competences.forEach(c => c.notes.forEach(n => {
-            if (n.competence_mismatch) acc.mismatch++;
-            if (n.is_retroactive) acc.retroactive++;
-            if (n.is_out_of_period) acc.out_of_period++;
-            if (n.is_retained) acc.retained++;
-            acc.total++;
-        }));
-        return acc;
-    }, { total: 0, mismatch: 0, retroactive: 0, out_of_period: 0, retained: 0 });
+    // ⚡ Bolt Optimization: Memoize reduce operation to prevent recalculation on every render
+    const flagCounts = useMemo(() => {
+        return groupedNfs.reduce((acc, g) => {
+            g.competences.forEach(c => c.notes.forEach(n => {
+                if (n.competence_mismatch) acc.mismatch++;
+                if (n.is_retroactive) acc.retroactive++;
+                if (n.is_out_of_period) acc.out_of_period++;
+                if (n.is_retained) acc.retained++;
+                acc.total++;
+            }));
+            return acc;
+        }, { total: 0, mismatch: 0, retroactive: 0, out_of_period: 0, retained: 0 });
+    }, [groupedNfs]);
 
     return (
         <div className="space-y-6">
