@@ -20,6 +20,7 @@ import {
     Eye,
     EyeOff
 } from 'lucide-react';
+import ConfirmModal from '../components/ConfirmModal';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
@@ -31,6 +32,8 @@ export default function Companies() {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [editingId, setEditingId] = useState(null);
+    const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+    const [companyToDelete, setCompanyToDelete] = useState(null);
 
     // Form states
     const [formData, setFormData] = useState({
@@ -78,15 +81,23 @@ export default function Companies() {
         }
     };
 
-    const handleDelete = async (id) => {
-        if (!confirm("Tem certeza que deseja excluir esta empresa? Todas as notas vinculadas também poderão ser afetadas.")) return;
+    const handleDeleteClick = (company) => {
+        setCompanyToDelete(company);
+        setIsDeleteModalOpen(true);
+    };
+
+    const handleDeleteConfirm = async () => {
+        if (!companyToDelete) return;
         
         try {
-            await axios.delete(`${API_URL}/companies/${id}`);
+            await axios.delete(`${API_URL}/companies/${companyToDelete.id}`);
             setSuccess("Empresa excluída!");
             fetchCompanies();
         } catch (err) {
             setError("Erro ao excluir empresa");
+        } finally {
+            setCompanyToDelete(null);
+            setIsDeleteModalOpen(false);
         }
     };
 
@@ -214,13 +225,15 @@ export default function Companies() {
                                         onClick={() => handleEdit(company)}
                                         className="p-2 text-slate-500 hover:text-brand-600 hover:bg-brand-50 rounded-lg transition border border-slate-100"
                                         title="Editar"
+                                        aria-label="Editar"
                                     >
                                         <Pencil size={18} />
                                     </button>
                                     <button 
-                                        onClick={() => handleDelete(company.id)}
+                                        onClick={() => handleDeleteClick(company)}
                                         className="p-2 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition border border-slate-100"
                                         title="Excluir"
+                                        aria-label="Excluir"
                                     >
                                         <Trash2 size={18} />
                                     </button>
@@ -256,6 +269,17 @@ export default function Companies() {
                     </div>
                 )}
             </div>
+
+            <ConfirmModal
+                isOpen={isDeleteModalOpen}
+                onClose={() => setIsDeleteModalOpen(false)}
+                onConfirm={handleDeleteConfirm}
+                title="Excluir Empresa"
+                message={`Tem certeza que deseja excluir a empresa "${companyToDelete?.name}"? Todas as notas vinculadas também poderão ser afetadas.`}
+                confirmText="Excluir"
+                cancelText="Cancelar"
+                type="danger"
+            />
 
             {/* Registration/Edit Modal */}
             {isModalOpen && (
