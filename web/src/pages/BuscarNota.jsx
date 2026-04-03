@@ -1,12 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
-import { Search, Loader2, AlertCircle, Building2, HardDrive, ShieldCheck, Calendar, CheckCircle, PlusCircle, FileCode, ChevronDown, ChevronRight, Layers, Layers as LayersIcon, ArrowDown, ArrowUp, Database, RefreshCcw, Info, RotateCcw } from 'lucide-react';
+import { Search, Loader2, AlertCircle, Building2, HardDrive, ShieldCheck, Calendar, CheckCircle, FileCode, ChevronDown, ChevronRight, Layers, ArrowDown, ArrowUp, Database, RefreshCcw, Info, RotateCcw } from 'lucide-react';
 import ConfirmModal from '../components/ConfirmModal';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
 export default function BuscarNota() {
-    const [loadingCompanies, setLoadingCompanies] = useState(false);
     const [companies, setCompanies] = useState([]);
     const [companiesError, setCompaniesError] = useState(null);
 
@@ -16,8 +15,6 @@ export default function BuscarNota() {
     const [loadingExtrair, setLoadingExtrair] = useState(false);
     const [loadingValidate, setLoadingValidate] = useState(false);
     const [certInfo, setCertInfo] = useState(null);
-    const [companyNotFound, setCompanyNotFound] = useState(false);
-    const [loadingQuickRegister, setLoadingQuickRegister] = useState(false);
     const [error, setError] = useState(null);
     const [success, setSuccess] = useState(null);
 
@@ -78,7 +75,6 @@ export default function BuscarNota() {
     const logSectionRef = useRef(null);
 
     const fetchCompanies = async () => {
-        setLoadingCompanies(true);
         setCompaniesError(null);
         try {
             const res = await axios.get(`${API_URL}/companies`);
@@ -86,8 +82,6 @@ export default function BuscarNota() {
         } catch (err) {
             console.error("Fetch Companies Error:", err);
             setCompaniesError("Não foi possível carregar empresas. Verifique se o backend está rodando.");
-        } finally {
-            setLoadingCompanies(false);
         }
     };
 
@@ -182,7 +176,6 @@ export default function BuscarNota() {
 
         if (name === 'certificateFilename' || name === 'password') {
             setCertInfo(null);
-            setCompanyNotFound(false);
         }
     };
 
@@ -259,7 +252,6 @@ export default function BuscarNota() {
         setLogs([]);
         setShowLogs(false);
         setCertInfo(null);
-        setCompanyNotFound(false);
         
         await fetchCompanies();
         
@@ -281,7 +273,6 @@ export default function BuscarNota() {
 
         setLoadingValidate(true);
         setCertInfo(null);
-        setCompanyNotFound(false);
         setError(null);
         try {
             const res = await axios.post(`${API_URL}/scraper/validate-cert`, {
@@ -303,7 +294,6 @@ export default function BuscarNota() {
                     console.log(`[DEBUG] Empresa identificada automaticamente: ${matched.name}`);
                 } else {
                     // Se não existe, cria automaticamente
-                    setLoadingQuickRegister(true);
                     try {
                         const quickRes = await axios.post(`${API_URL}/companies/quick`, {
                             name: info.cn,
@@ -316,8 +306,6 @@ export default function BuscarNota() {
                     } catch (err) {
                         console.error("Erro ao cadastrar empresa automática:", err);
                         setError("Certificado válido, mas erro ao registrar empresa no sistema.");
-                    } finally {
-                        setLoadingQuickRegister(false);
                     }
                 }
             }

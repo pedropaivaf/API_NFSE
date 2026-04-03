@@ -76,8 +76,9 @@ export default function Login() {
 
                 <form onSubmit={handleLogin} className="space-y-6">
                     <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-2">Chave de Acesso</label>
+                        <label htmlFor="accessKey" className="block text-sm font-medium text-slate-700 mb-2">Chave de Acesso</label>
                         <input
+                            id="accessKey"
                             type="text"
                             required
                             className="w-full px-4 py-3 rounded-lg border border-slate-300 focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none font-mono text-center tracking-widest uppercase text-slate-800"
