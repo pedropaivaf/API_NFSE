@@ -1,0 +1,3 @@
+## 2025-02-14 - Improve Form Labelling and Error Announcements
+**Learning:** Found that basic form inputs lacked proper label association (`htmlFor` -> `id`) and error messages weren't being announced to screen readers. This is a common pattern in rapid React development where visual labels exist but semantic links are missing.
+**Action:** Always ensure `htmlFor` is used on labels and matches the input `id`. Use `role="alert"` and `aria-live="assertive"` for dynamic error messages, and `aria-invalid`/`aria-describedby` on the inputs themselves to clearly communicate state to assistive tech.

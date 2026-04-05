@@ -68,7 +68,7 @@ export default function Login() {
                 </div>
 
                 {error && (
-                    <div className="mb-4 p-3 bg-red-50 text-red-600 text-sm rounded-lg border border-red-100 flex items-center gap-2">
+                    <div id="login-error" role="alert" aria-live="assertive" className="mb-4 p-3 bg-red-50 text-red-600 text-sm rounded-lg border border-red-100 flex items-center gap-2">
                         <AlertCircle size={18} />
                         {error}
                     </div>
@@ -76,10 +76,13 @@ export default function Login() {
 
                 <form onSubmit={handleLogin} className="space-y-6">
                     <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-2">Chave de Acesso</label>
+                        <label htmlFor="accessKey" className="block text-sm font-medium text-slate-700 mb-2">Chave de Acesso</label>
                         <input
+                            id="accessKey"
                             type="text"
                             required
+                            aria-invalid={!!error}
+                            aria-describedby={error ? "login-error" : undefined}
                             className="w-full px-4 py-3 rounded-lg border border-slate-300 focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none font-mono text-center tracking-widest uppercase text-slate-800"
                             placeholder="XXXX-XXXX-XXXX"
                             value={accessKey}
@@ -90,9 +93,14 @@ export default function Login() {
                     <button
                         type="submit"
                         disabled={loading}
-                        className="w-full py-3 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 transition flex items-center justify-center gap-2 shadow-sm disabled:opacity-70"
+                        aria-busy={loading}
+                        className="w-full py-3 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 transition flex items-center justify-center gap-2 shadow-sm disabled:opacity-70 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2"
                     >
-                        {loading ? <Loader2 className="animate-spin" /> : 'Acessar Sistema'}
+                        {loading ? (
+                            <>
+                                <Loader2 className="animate-spin" /> Acessando...
+                            </>
+                        ) : 'Acessar Sistema'}
                     </button>
                 </form>
             </div>
