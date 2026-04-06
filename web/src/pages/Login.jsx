@@ -68,18 +68,21 @@ export default function Login() {
                 </div>
 
                 {error && (
-                    <div className="mb-4 p-3 bg-red-50 text-red-600 text-sm rounded-lg border border-red-100 flex items-center gap-2">
-                        <AlertCircle size={18} />
+                    <div id="login-error" role="alert" className="mb-4 p-3 bg-red-50 text-red-600 text-sm rounded-lg border border-red-100 flex items-center gap-2">
+                        <AlertCircle size={18} aria-hidden="true" />
                         {error}
                     </div>
                 )}
 
                 <form onSubmit={handleLogin} className="space-y-6">
                     <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-2">Chave de Acesso</label>
+                        <label htmlFor="accessKey" className="block text-sm font-medium text-slate-700 mb-2">Chave de Acesso</label>
                         <input
+                            id="accessKey"
                             type="text"
                             required
+                            aria-invalid={error ? "true" : "false"}
+                            aria-describedby={error ? "login-error" : undefined}
                             className="w-full px-4 py-3 rounded-lg border border-slate-300 focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none font-mono text-center tracking-widest uppercase text-slate-800"
                             placeholder="XXXX-XXXX-XXXX"
                             value={accessKey}
@@ -92,7 +95,12 @@ export default function Login() {
                         disabled={loading}
                         className="w-full py-3 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 transition flex items-center justify-center gap-2 shadow-sm disabled:opacity-70"
                     >
-                        {loading ? <Loader2 className="animate-spin" /> : 'Acessar Sistema'}
+                        {loading ? (
+                            <>
+                                <Loader2 className="animate-spin" aria-hidden="true" />
+                                <span>Acessando...</span>
+                            </>
+                        ) : 'Acessar Sistema'}
                     </button>
                 </form>
             </div>
